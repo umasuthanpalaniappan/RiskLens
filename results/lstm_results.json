@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-07-27T16:03:46.376224Z",
+  "timestamp": "2026-07-27T17:24:22.607721Z",
   "epochs": 35,
   "tickers": [
     "RELIANCE.NS",
@@ -24,6 +24,6 @@
   "n_train": 46998,
   "n_val": 10296,
   "n_test": 10296,
-  "test_mse": 0.8775961995124817,
-  "test_direction_accuracy": 0.7067793317793318
+  "test_mse": 0.8777555227279663,
+  "test_direction_accuracy": 0.7128010878010878
 }

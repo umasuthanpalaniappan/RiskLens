@@ -154,6 +154,17 @@ changed. It does not retrain `models/*.pt`; retraining is a separate,
 manual step (`run_lstm.py` / `run_gnn.py`) since it's compute-heavier and
 the universe/graph structure doesn't need to be re-learned every day.
 
+`.github/workflows/train_models.yml` is that manual retraining step, run as
+a GitHub Actions job (`workflow_dispatch` only — no schedule) rather than
+locally, since GitHub's runners have real internet access that some
+development environments don't. It installs `requirements.txt`, runs
+`scripts/run_lstm.py` then `scripts/run_gnn.py`, and commits
+`models/*.pt` + `results/{lstm,gnn}_results.json` + `results/norm_stats.json`
+as `github-actions[bot]`, only if anything changed. Trigger it from the
+Actions tab whenever you want the models retrained on the latest history
+(e.g. after adding tickers, changing features/hyperparameters, or simply to
+refresh on more recent data).
+
 ## Dashboard
 
 `app/dashboard.py` is a single-file Streamlit app with no browser storage —

@@ -1,0 +1,41 @@
+name: Retrain RiskLens models
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Train LSTM baseline
+        run: python scripts/run_lstm.py
+
+      - name: Train dynamic GNN
+        run: python scripts/run_gnn.py
+
+      - name: Commit and push retrained models if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain models/ results/)" ]; then
+            git add models/ results/lstm_results.json results/gnn_results.json results/norm_stats.json
+            git commit -m "chore: retrain LSTM+GNN on live NSE data ($(date -u +%Y-%m-%d))"
+            git push
+          else
+            echo "No changes in models/ or results/, skipping commit."
+          fi

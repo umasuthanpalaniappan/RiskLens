@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-07-27T14:25:38.335096Z",
+  "epochs": 30,
+  "tickers": [
+    "RELIANCE.NS",
+    "TCS.NS",
+    "HDFCBANK.NS",
+    "INFY.NS",
+    "ICICIBANK.NS",
+    "HINDUNILVR.NS",
+    "ITC.NS",
+    "SBIN.NS",
+    "BHARTIARTL.NS",
+    "KOTAKBANK.NS"
+  ],
+  "n_train": 20460,
+  "n_val": 4510,
+  "n_test": 4510,
+  "test_mse": 0.2665823996067047,
+  "test_direction_accuracy": 0.720620842572062
+}

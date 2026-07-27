@@ -1,0 +1,37 @@
+{
+  "timestamp": "2026-07-27T14:29:26.020504Z",
+  "epochs": 30,
+  "tickers": [
+    "RELIANCE.NS",
+    "TCS.NS",
+    "HDFCBANK.NS",
+    "INFY.NS",
+    "ICICIBANK.NS",
+    "HINDUNILVR.NS",
+    "ITC.NS",
+    "SBIN.NS",
+    "BHARTIARTL.NS",
+    "KOTAKBANK.NS"
+  ],
+  "n_train": 2046,
+  "n_val": 451,
+  "n_test": 451,
+  "alpha": {
+    "RELIANCE.NS": 0.337796688079834,
+    "TCS.NS": 0.34672677516937256,
+    "HDFCBANK.NS": 0.42905670404434204,
+    "INFY.NS": 0.41052520275115967,
+    "ICICIBANK.NS": 0.3539801239967346,
+    "HINDUNILVR.NS": 0.42417386174201965,
+    "ITC.NS": 0.36883658170700073,
+    "SBIN.NS": 0.4033529460430145,
+    "BHARTIARTL.NS": 0.3745066821575165,
+    "KOTAKBANK.NS": 0.39178594946861267
+  },
+  "test_mse_blended": 0.24845349788665771,
+  "test_direction_accuracy_blended": 0.7317073170731707,
+  "test_mse_lstm_only": 0.8664466142654419,
+  "test_direction_accuracy_lstm_only": 0.6485587583148559,
+  "test_mse_gnn_only": 1.740366816520691,
+  "test_direction_accuracy_gnn_only": 0.4984478935698448
+}

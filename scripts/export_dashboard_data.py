@@ -7,6 +7,10 @@ Prints a single compact JSON line to stdout, delimited by marker lines, so it
 can be captured from an Actions job's logs without ever committing raw
 market data to the repo. Date arrays are stored once at the top level (every
 ticker shares the same trading calendar) rather than repeated per ticker.
+
+Exports the FULL daily history for every ticker (not a downsampled subset)
+so the showcase page can offer real lookback ranges (1Y/3Y/5Y/10Y/Max) and
+a complete raw data table per stock, not just a recent window.
 """
 import json
 import sys
@@ -18,28 +22,20 @@ import pandas as pd
 
 from src import config, data, features, graph, regime
 
-RECENT_DAYS = 500  # ~2 trading years of full daily detail
-
 
 def main() -> None:
     tickers = config.TICKERS
     prices, volumes = data.fetch_price_volume(tickers)
     returns = features.log_returns(prices)
-
-    monthly_prices = prices.resample("ME").last().dropna(how="all")
-    recent_prices = prices.iloc[-RECENT_DAYS:]
-    recent_volumes = volumes.reindex(recent_prices.index)
-    recent_returns = returns.reindex(recent_prices.index)
-    recent_vol = pd.DataFrame({t: features.realized_vol(returns[t]) for t in tickers}).reindex(recent_prices.index)
+    vol = pd.DataFrame({t: features.realized_vol(returns[t]) for t in tickers})
 
     per_ticker = {}
     for t in tickers:
         per_ticker[t] = {
-            "long_term_price": [round(float(v), 2) if pd.notna(v) else None for v in monthly_prices[t]],
-            "price": [round(float(v), 2) if pd.notna(v) else None for v in recent_prices[t]],
-            "volume": [int(v) if pd.notna(v) else None for v in recent_volumes[t]],
-            "return": [round(float(v), 5) if pd.notna(v) else None for v in recent_returns[t]],
-            "realized_vol": [round(float(v), 4) if pd.notna(v) else None for v in recent_vol[t]],
+            "price": [round(float(v), 2) if pd.notna(v) else None for v in prices[t]],
+            "volume": [int(v) if pd.notna(v) else None for v in volumes[t]],
+            "return": [round(float(v), 5) if pd.notna(v) else None for v in returns[t]],
+            "realized_vol": [round(float(v), 4) if pd.notna(v) else None for v in vol[t]],
         }
 
     recent_window = returns.iloc[-config.GRAPH_WINDOW:][tickers]
@@ -56,16 +52,23 @@ def main() -> None:
     payload = {
         "generated_at": pd.Timestamp.now("UTC").isoformat(),
         "tickers": tickers,
-        "long_term_dates": [d.strftime("%Y-%m-%d") for d in monthly_prices.index],
-        "recent_dates": [d.strftime("%Y-%m-%d") for d in recent_prices.index],
+        "dates": [d.strftime("%Y-%m-%d") for d in prices.index],
         "series": per_ticker,
         "correlation": correlation,
         "regime_timeline": regime_timeline,
     }
     blob = json.dumps(payload, separators=(",", ":"))
     print(f"payload size: {len(blob)} bytes", file=sys.stderr)
+
+    # Printed in fixed-size chunks (not one giant line) since some CI log
+    # backends cap individual line length; reassemble by concatenating
+    # chunk lines in order between the markers.
+    chunk_size = 50_000
+    chunks = [blob[i:i + chunk_size] for i in range(0, len(blob), chunk_size)]
     print("===DASHBOARD_DATA_START===")
-    print(blob)
+    print(f"CHUNKS={len(chunks)}")
+    for i, c in enumerate(chunks):
+        print(f"CHUNK{i:05d}:{c}")
     print("===DASHBOARD_DATA_END===")
 
 

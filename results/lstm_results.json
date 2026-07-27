@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-07-27T15:37:54.583943Z",
+  "timestamp": "2026-07-27T16:03:46.376224Z",
   "epochs": 35,
   "tickers": [
     "RELIANCE.NS",
@@ -21,9 +21,9 @@
     "NTPC.NS",
     "NESTLEIND.NS"
   ],
-  "n_train": 49788,
-  "n_val": 10890,
-  "n_test": 10890,
-  "test_mse": 0.33999165892601013,
-  "test_direction_accuracy": 0.71267217630854
+  "n_train": 46998,
+  "n_val": 10296,
+  "n_test": 10296,
+  "test_mse": 0.8775961995124817,
+  "test_direction_accuracy": 0.7067793317793318
 }

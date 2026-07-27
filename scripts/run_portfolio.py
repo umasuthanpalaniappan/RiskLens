@@ -40,7 +40,7 @@ def main() -> None:
     panel = features.build_panel(prices, volumes)
     panel = features.align_panel(panel, require_target=False)
 
-    sample = dataset.latest_graph_sample(panel, returns, stats)
+    sample = dataset.latest_graph_sample(panel, stats)
     with torch.no_grad():
         pred_norm, _, _, alpha = model(sample.X, sample.laplacian)
     predicted_ratio = dataset.denormalize(pred_norm.numpy(), stats["target_vol_ratio"])
@@ -50,7 +50,6 @@ def main() -> None:
 
     recent_window = returns.iloc[-config.GRAPH_WINDOW:][tickers]
     corr_matrix = graph.correlation_matrix(recent_window)
-    laplacian = graph.graph_laplacian(graph.correlation_adjacency(recent_window))
 
     market_vol = regime.market_volatility(returns[tickers])
     today_regime = regime.current_regime(market_vol)

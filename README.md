@@ -13,11 +13,16 @@ Streamlit dashboard.
    - `LSTMVolModel` — a single-stock LSTM. Each stock is scored from its own
      return/volatility history only.
    - `GNNVolModel` — the same LSTM encoder, refined by a graph convolution
-     over a **dynamic correlation graph** that is re-estimated on a rolling
-     60-day window (so the graph structure itself evolves over time). A
-     learnable per-stock gate (`alpha`, in [0, 1]) blends the graph-refined
-     prediction with the plain LSTM prediction, so the model can fall back
-     to the univariate signal for stocks the graph doesn't help.
+     over a **dynamic graph** that is re-estimated on a rolling 60-day
+     window (so the graph structure itself evolves over time). Edges come
+     from cross-stock **realised-volatility correlation**, not return
+     correlation -- vol clustering/contagion is the structure that's
+     actually relevant to a model predicting where volatility goes next,
+     whereas return correlation mostly captures a different thing (shared
+     market/sector beta). A learnable per-stock gate (`alpha`, in [0, 1])
+     blends the graph-refined prediction with the plain LSTM prediction, so
+     the model can fall back to the univariate signal for stocks the graph
+     doesn't help.
 2. **Build a portfolio.** Turn today's predicted volatilities into a
    long-only **minimum-variance** portfolio (see below for why not full
    Markowitz).

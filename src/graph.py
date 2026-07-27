@@ -1,14 +1,14 @@
 """Dynamic correlation-graph construction for the GNN and the portfolio optimiser.
 
 The graph over stocks is re-estimated on a rolling basis: at any date ``t``
-the adjacency is the absolute pairwise correlation of daily returns over the
-trailing ``GRAPH_WINDOW`` days ending at ``t`` (no look-ahead). Both the GNN
-training loop (dataset.py) and the live portfolio script use these same
-functions so the graph is defined identically everywhere.
+the adjacency is the absolute pairwise correlation over the trailing
+``GRAPH_WINDOW`` days ending at ``t`` (no look-ahead), of whatever signal the
+caller passes in. portfolio.py passes *returns* (it needs a real covariance
+Sigma). dataset.py's GNN dataset passes *realised volatility* instead --
+vol-clustering/contagion structure is what's actually relevant to a model
+predicting where volatility goes next, not return correlation.
 """
 from __future__ import annotations
-
-from typing import List
 
 import numpy as np
 import pandas as pd
@@ -16,50 +16,32 @@ import pandas as pd
 from src import config
 
 
-def correlation_matrix(window_returns: pd.DataFrame) -> np.ndarray:
-    """Signed pairwise-correlation matrix (unit diagonal) for one window of returns.
+def correlation_matrix(window_data: pd.DataFrame) -> np.ndarray:
+    """Signed pairwise-correlation matrix (unit diagonal) for one window of data.
 
     Distinct from ``correlation_adjacency``: this keeps the sign and the
     diagonal, because portfolio.py needs a proper correlation matrix to
     build the predicted covariance Sigma, whereas the GNN's message-passing
     graph wants an unsigned, zero-diagonal, thresholded adjacency.
     """
-    return window_returns.corr().fillna(0.0).values
+    return window_data.corr().fillna(0.0).values
 
 
 def correlation_adjacency(
-    window_returns: pd.DataFrame,
+    window_data: pd.DataFrame,
     threshold: float = config.GRAPH_CORR_THRESHOLD,
 ) -> np.ndarray:
-    """Absolute pairwise-correlation adjacency matrix for one window of returns.
+    """Absolute pairwise-correlation adjacency matrix for one window of data.
 
-    ``window_returns`` is (days x tickers). The diagonal is zeroed (no
+    ``window_data`` is (days x tickers). The diagonal is zeroed (no
     self-loops; models.py adds self-loops explicitly when needed) and edges
     with |correlation| below ``threshold`` are zeroed out.
     """
-    corr = window_returns.corr().abs().fillna(0.0).values.copy()
+    corr = window_data.corr().abs().fillna(0.0).values.copy()
     np.fill_diagonal(corr, 0.0)
     if threshold > 0:
         corr[corr < threshold] = 0.0
     return corr
-
-
-def rolling_adjacency_series(
-    returns: pd.DataFrame,
-    window: int = config.GRAPH_WINDOW,
-    threshold: float = config.GRAPH_CORR_THRESHOLD,
-) -> List[np.ndarray]:
-    """Adjacency matrix ending at each date of ``returns`` once enough history exists.
-
-    Returns a list aligned to ``returns.index[window - 1:]`` (one matrix per
-    valid date), used by dataset.py to build the dynamic-graph training set.
-    """
-    adjacencies = []
-    values = returns.values
-    for end in range(window, len(returns) + 1):
-        w = returns.iloc[end - window:end]
-        adjacencies.append(correlation_adjacency(w, threshold))
-    return adjacencies
 
 
 def graph_laplacian(adjacency: np.ndarray, normalized: bool = True) -> np.ndarray:

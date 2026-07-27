@@ -45,6 +45,14 @@ def _download(tickers: List[str], start: str, end: Optional[str]) -> Tuple[pd.Da
     volumes = volumes.sort_index()
     prices.index.name = "date"
     volumes.index.name = "date"
+
+    empty = [t for t in tickers if t not in prices.columns or prices[t].dropna().empty]
+    if empty:
+        raise ValueError(
+            f"yfinance returned no data for: {empty}. A ticker may have been delisted, "
+            f"renamed, or suspended (e.g. after a merger/demerger) -- replace it in "
+            f"config.TICKERS (and config.SECTOR_MAP) and retrain."
+        )
     return prices, volumes
 
 
@@ -80,8 +88,13 @@ def fetch_latest_window(
 
     Used by the live portfolio script, which always wants today's prices
     plus enough trailing history to compute rolling volatility/correlations.
+
+    The refresh always re-downloads the *full* ``config.START_DATE``-to-today
+    history (not just ``lookback_days``) so that the on-disk cache -- which
+    the dashboard's Market Overview tab also reads -- keeps its full
+    multi-year span rather than being truncated down to a short live window
+    every time this runs.
     """
     tickers = tickers or config.TICKERS
-    start = (dt.date.today() - dt.timedelta(days=int(lookback_days * 1.6))).isoformat()
-    prices, volumes = fetch_price_volume(tickers, start=start, refresh=True)
+    prices, volumes = fetch_price_volume(tickers, start=config.START_DATE, refresh=True)
     return prices.tail(lookback_days), volumes.tail(lookback_days)

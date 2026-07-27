@@ -43,14 +43,14 @@ TICKERS: List[str] = [
     "SUNPHARMA.NS",
     "CIPLA.NS",
     "MARUTI.NS",
-    "TATAMOTORS.NS",
+    "LT.NS",
     "ULTRACEMCO.NS",
     "TATASTEEL.NS",
     "NTPC.NS",
     "NESTLEIND.NS",
 ]
 
-START_DATE = "2015-01-01"
+START_DATE = "2011-01-01"  # ~15 years of history
 # End date is left as None -> "today" at data-download time.
 END_DATE = None
 
@@ -115,7 +115,7 @@ SECTOR_MAP = {
     "SUNPHARMA.NS": "Pharma",
     "CIPLA.NS": "Pharma",
     "MARUTI.NS": "Auto",
-    "TATAMOTORS.NS": "Auto",
+    "LT.NS": "Capital Goods",
     "ULTRACEMCO.NS": "Cement",
     "TATASTEEL.NS": "Metals",
     "NTPC.NS": "Power",

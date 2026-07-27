@@ -28,6 +28,13 @@ jobs:
       - name: Run daily portfolio update
         run: python scripts/run_portfolio.py
 
+      - name: Upload real price/volume cache as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: price-cache
+          path: data/raw/
+          retention-days: 7
+
       - name: Commit and push results if changed
         run: |
           git config user.name "github-actions[bot]"

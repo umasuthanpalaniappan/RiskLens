@@ -28,6 +28,13 @@ jobs:
       - name: Train dynamic GNN
         run: python scripts/run_gnn.py
 
+      - name: Upload real price/volume cache as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: price-cache
+          path: data/raw/
+          retention-days: 7
+
       - name: Commit and push retrained models if changed
         run: |
           git config user.name "github-actions[bot]"

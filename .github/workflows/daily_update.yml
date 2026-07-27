@@ -1,0 +1,41 @@
+name: Daily RiskLens update
+
+on:
+  schedule:
+    # 12:30 UTC == 18:00 IST, after the NSE market close.
+    - cron: "30 12 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update-portfolio:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily portfolio update
+        run: python scripts/run_portfolio.py
+
+      - name: Commit and push results if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain results/)" ]; then
+            git add results/
+            git commit -m "chore: daily RiskLens portfolio update ($(date -u +%Y-%m-%d))"
+            git push
+          else
+            echo "No changes in results/, skipping commit."
+          fi

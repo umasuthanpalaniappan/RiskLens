@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-07-27T14:43:47.240736Z",
+  "epochs": 35,
+  "tickers": [
+    "RELIANCE.NS",
+    "TCS.NS",
+    "HDFCBANK.NS",
+    "INFY.NS",
+    "ICICIBANK.NS",
+    "HINDUNILVR.NS",
+    "ITC.NS",
+    "SBIN.NS",
+    "BHARTIARTL.NS",
+    "KOTAKBANK.NS",
+    "SUNPHARMA.NS",
+    "CIPLA.NS",
+    "MARUTI.NS",
+    "TATAMOTORS.NS",
+    "ULTRACEMCO.NS",
+    "TATASTEEL.NS",
+    "NTPC.NS",
+    "NESTLEIND.NS"
+  ],
+  "n_train": 36648,
+  "n_val": 8064,
+  "n_test": 8082,
+  "test_mse": 0.43341535329818726,
+  "test_direction_accuracy": 0.7228408809700569
+}

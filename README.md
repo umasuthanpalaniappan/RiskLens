@@ -96,6 +96,20 @@ daily log return, trailing realised volatility, `MOMENTUM_WINDOW`-day
 cumulative return (trend), and a rolling z-score of traded volume (unusual
 activity). All four feed both the LSTM and the GNN encoder.
 
+History spans `config.START_DATE` (2011-01-01, ~15 years) to today.
+`run_portfolio.py`'s daily refresh always re-downloads that full span (not
+just a short live window) before persisting the cache, specifically so the
+dashboard's Market Overview tab keeps its full multi-year history instead
+of being truncated down to a few hundred days every time the daily job
+runs — it just returns the trailing window it actually needs to the caller.
+
+If a ticker in `config.TICKERS` is ever delisted, renamed, or otherwise
+stops resolving on Yahoo Finance (this happens — corporate actions like
+mergers/demergers retire old symbols), `data.py` raises a clear error
+naming the ticker rather than failing downstream with a cryptic empty-data
+crash. Fix it by swapping the symbol in `config.TICKERS`/`config.SECTOR_MAP`
+and retraining.
+
 ## Setup
 
 ```bash
@@ -153,12 +167,13 @@ every reload re-reads the on-disk results. It has three tabs:
   a breakdown of the GNN's internal LSTM-only/GNN-only/blended heads, and
   the per-stock gate alpha.
 - **Market Overview** — a correlation heatmap of the same rolling window
-  the GNN's graph and the portfolio's Sigma are built from, trailing
-  realised-vol trend lines per stock, and a sortable universe snapshot
-  table (last close + trailing vol for every stock, by sector). This tab
-  reads the local `data/raw/` price/volume cache in addition to the three
-  results JSONs, and degrades to a friendly message if that cache isn't
-  present yet.
+  the GNN's graph and the portfolio's Sigma are built from, a price-history
+  and realised-vol trend chart per stock with a selectable lookback (1Y /
+  3Y / 5Y / 10Y / Max, up to the full ~15-year cache), and a sortable
+  universe snapshot table (last close + trailing vol for every stock, by
+  sector). This tab reads the local `data/raw/` price/volume cache in
+  addition to the three results JSONs, and degrades to a friendly message
+  if that cache isn't present yet.
 
 A last-updated timestamp is shown at the bottom of every tab.
 

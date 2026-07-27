@@ -304,19 +304,38 @@ with tab_market:
         )
 
         st.divider()
-        st.subheader("Trailing realised volatility, by stock")
-        default_selection = sorted(available, key=lambda t: -weights.get(t, 0))[:6]
-        selected = st.multiselect(
-            "Stocks to plot", options=available, default=default_selection,
-            format_func=lambda t: t.replace(".NS", ""),
-        )
+        st.subheader("Historical trends")
+        LOOKBACK_OPTIONS = {"1Y": 252, "3Y": 756, "5Y": 1260, "10Y": 2520, "Max (~15Y)": None}
+        ctrl_left, ctrl_right = st.columns([2, 1])
+        with ctrl_left:
+            default_selection = sorted(available, key=lambda t: -weights.get(t, 0))[:6]
+            selected = st.multiselect(
+                "Stocks to plot", options=available, default=default_selection,
+                format_func=lambda t: t.replace(".NS", ""),
+            )
+        with ctrl_right:
+            lookback_label = st.selectbox("Lookback", options=list(LOOKBACK_OPTIONS.keys()), index=0)
+        lookback_days = LOOKBACK_OPTIONS[lookback_label]
+
         if selected:
-            vol_frame = pd.DataFrame(
-                {t.replace(".NS", ""): features.realized_vol(returns_cache[t]) for t in selected}
-            ).iloc[-252:]
+            def _tail(frame: pd.DataFrame) -> pd.DataFrame:
+                return frame if lookback_days is None else frame.iloc[-lookback_days:]
+
+            price_frame = _tail(pd.DataFrame({t.replace(".NS", ""): prices_cache[t] for t in selected}))
+            fig_price = px.line(price_frame, labels={"value": "Close price", "date": "Date"})
+            fig_price.update_layout(legend_title="Stock", yaxis_title="Close price (INR)")
+            st.plotly_chart(fig_price, use_container_width=True)
+
+            vol_frame = _tail(
+                pd.DataFrame({t.replace(".NS", ""): features.realized_vol(returns_cache[t]) for t in selected})
+            )
             fig_vol = px.line(vol_frame, labels={"value": "Annualised realised vol", "date": "Date"})
-            fig_vol.update_layout(yaxis_tickformat=".0%", legend_title="Stock")
+            fig_vol.update_layout(yaxis_tickformat=".0%", legend_title="Stock", yaxis_title="Realised volatility")
             st.plotly_chart(fig_vol, use_container_width=True)
+        st.caption(
+            f"Price cache spans {prices_cache.index.min().date()} to {prices_cache.index.max().date()} "
+            f"({len(prices_cache)} trading days)."
+        )
 
         st.divider()
         st.subheader("Universe snapshot")

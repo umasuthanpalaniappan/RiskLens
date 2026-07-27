@@ -35,9 +35,9 @@ def main() -> None:
     model.eval()
 
     lookback = max(config.RETURN_WINDOW, config.GRAPH_WINDOW, config.REGIME_LOOKBACK) + config.VOL_WINDOW + config.HORIZON + 10
-    prices = data.fetch_latest_window(tickers, lookback_days=lookback)
+    prices, volumes = data.fetch_latest_window(tickers, lookback_days=lookback)
     returns = features.log_returns(prices)
-    panel = features.build_panel(prices)
+    panel = features.build_panel(prices, volumes)
     panel = features.align_panel(panel, require_target=False)
 
     sample = dataset.latest_graph_sample(panel, returns, stats)

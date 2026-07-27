@@ -83,11 +83,18 @@ thin wrapper around it.
 
 ## Data
 
-`src/data.py` downloads daily adjusted-close prices for a 10-stock NSE
-universe (`config.TICKERS`) via `yfinance` and caches them to
-`data/raw/prices.csv`. `run_lstm.py`/`run_gnn.py` use the cache when
-present; `run_portfolio.py` always refreshes it, since it needs today's
-close.
+`src/data.py` downloads daily adjusted-close prices *and* traded volume for
+an 18-stock NSE universe (`config.TICKERS`, spanning banking, IT, energy,
+FMCG, telecom, pharma, auto, cement, metals and power — see
+`config.SECTOR_MAP`) via `yfinance` in a single request, caching each to
+`data/raw/prices.csv` / `data/raw/volume.csv`. `run_lstm.py`/`run_gnn.py`
+use the cache when present; `run_portfolio.py` always refreshes it, since
+it needs today's close.
+
+Each stock is represented by four features (`config.FEATURE_COLUMNS`):
+daily log return, trailing realised volatility, `MOMENTUM_WINDOW`-day
+cumulative return (trend), and a rolling z-score of traded volume (unusual
+activity). All four feed both the LSTM and the GNN encoder.
 
 ## Setup
 
@@ -135,15 +142,25 @@ the universe/graph structure doesn't need to be re-learned every day.
 
 ## Dashboard
 
-`app/dashboard.py` is a single-file Streamlit app with no server-side state
-or browser storage — every reload re-reads the three JSON files under
-`results/`. It shows:
+`app/dashboard.py` is a single-file Streamlit app with no browser storage —
+every reload re-reads the on-disk results. It has three tabs:
 
-- **RiskLens** title with a calm/normal/crisis regime badge
-- portfolio weights (bar or pie, togglable)
-- a per-stock table: predicted volatility, portfolio weight, GNN gate alpha
-- an LSTM vs. LSTM+GNN test-set direction-accuracy comparison
-- a last-updated timestamp
+- **Portfolio** — RiskLens title with a calm/normal/crisis regime badge, KPI
+  tiles, portfolio weights (bar or pie, colour-coded by sector), a sector
+  allocation chart, and a per-stock table (predicted volatility, portfolio
+  weight, GNN gate alpha).
+- **Model Performance** — LSTM vs. LSTM+GNN direction-accuracy comparison,
+  a breakdown of the GNN's internal LSTM-only/GNN-only/blended heads, and
+  the per-stock gate alpha.
+- **Market Overview** — a correlation heatmap of the same rolling window
+  the GNN's graph and the portfolio's Sigma are built from, trailing
+  realised-vol trend lines per stock, and a sortable universe snapshot
+  table (last close + trailing vol for every stock, by sector). This tab
+  reads the local `data/raw/` price/volume cache in addition to the three
+  results JSONs, and degrades to a friendly message if that cache isn't
+  present yet.
+
+A last-updated timestamp is shown at the bottom of every tab.
 
 ## Regime classification
 

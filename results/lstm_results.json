@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-07-27T14:25:38.335096Z",
-  "epochs": 30,
+  "timestamp": "2026-07-27T14:43:47.240736Z",
+  "epochs": 35,
   "tickers": [
     "RELIANCE.NS",
     "TCS.NS",
@@ -11,11 +11,19 @@
     "ITC.NS",
     "SBIN.NS",
     "BHARTIARTL.NS",
-    "KOTAKBANK.NS"
+    "KOTAKBANK.NS",
+    "SUNPHARMA.NS",
+    "CIPLA.NS",
+    "MARUTI.NS",
+    "TATAMOTORS.NS",
+    "ULTRACEMCO.NS",
+    "TATASTEEL.NS",
+    "NTPC.NS",
+    "NESTLEIND.NS"
   ],
-  "n_train": 20460,
-  "n_val": 4510,
-  "n_test": 4510,
-  "test_mse": 0.2665823996067047,
-  "test_direction_accuracy": 0.720620842572062
+  "n_train": 36648,
+  "n_val": 8064,
+  "n_test": 8082,
+  "test_mse": 0.43341535329818726,
+  "test_direction_accuracy": 0.7228408809700569
 }

@@ -39,9 +39,9 @@ def prepare_universe(tickers=None) -> Tuple[Dict[str, "pd.DataFrame"], "pd.DataF
     the rolling correlation graph than the feature panel's own start date).
     """
     tickers = tickers or config.TICKERS
-    prices = data.fetch_prices(tickers)
+    prices, volumes = data.fetch_price_volume(tickers)
     returns = features.log_returns(prices)
-    panel = features.build_panel(prices)
+    panel = features.build_panel(prices, volumes)
     panel = features.align_panel(panel)
     return panel, returns
 

@@ -5,6 +5,12 @@ over the next ``HORIZON`` trading days is expected to change relative to the
 trailing ``VOL_WINDOW``-day realised volatility. A ratio > 1 means "vol is
 about to rise", < 1 means "vol is about to fall". This is what both models
 predict, and what portfolio.py consumes to build Sigma.
+
+Beyond raw returns and realised vol, two extra signals are fed to the
+models: trailing ``MOMENTUM_WINDOW``-day cumulative return (has the stock
+been trending?) and a rolling z-score of traded volume (is today unusually
+busy relative to its own recent history?) -- both cheap, well-known
+volatility-regime signals.
 """
 from __future__ import annotations
 
@@ -37,8 +43,20 @@ def forward_realized_vol(returns: pd.Series, horizon: int = config.HORIZON) -> p
     return reversed_roll.shift(-1)
 
 
-def build_stock_features(price_series: pd.Series) -> pd.DataFrame:
-    """Build the (log_return, realized_vol, target) frame for a single ticker."""
+def momentum(returns: pd.Series, window: int = config.MOMENTUM_WINDOW) -> pd.Series:
+    """Trailing cumulative log return over ``window`` days -- a simple trend/momentum signal."""
+    return returns.rolling(window).sum()
+
+
+def volume_zscore(volume: pd.Series, window: int = config.VOLUME_ZSCORE_WINDOW) -> pd.Series:
+    """Rolling z-score of traded volume: how unusual is today's activity?"""
+    rolling_mean = volume.rolling(window).mean()
+    rolling_std = volume.rolling(window).std()
+    return (volume - rolling_mean) / rolling_std.replace(0, np.nan)
+
+
+def build_stock_features(price_series: pd.Series, volume_series: pd.Series) -> pd.DataFrame:
+    """Build the per-ticker feature+target frame from that ticker's price and volume series."""
     ret = log_returns(price_series.to_frame()).iloc[:, 0]
     vol = realized_vol(ret)
     fwd_vol = forward_realized_vol(ret)
@@ -48,15 +66,20 @@ def build_stock_features(price_series: pd.Series) -> pd.DataFrame:
         {
             "log_return": ret,
             "realized_vol": vol,
+            "momentum": momentum(ret),
+            "volume_zscore": volume_zscore(volume_series),
             "target_vol_ratio": target,
         }
     )
     return frame
 
 
-def build_panel(prices: pd.DataFrame) -> Dict[str, pd.DataFrame]:
-    """Build per-ticker feature frames for every column of ``prices``."""
-    return {ticker: build_stock_features(prices[ticker]) for ticker in prices.columns}
+def build_panel(prices: pd.DataFrame, volumes: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+    """Build per-ticker feature frames for every column of ``prices``/``volumes``."""
+    return {
+        ticker: build_stock_features(prices[ticker], volumes[ticker])
+        for ticker in prices.columns
+    }
 
 
 def align_panel(panel: Dict[str, pd.DataFrame], require_target: bool = True) -> Dict[str, pd.DataFrame]:
@@ -65,7 +88,7 @@ def align_panel(panel: Dict[str, pd.DataFrame], require_target: bool = True) -> 
     ``require_target`` drops trailing rows without a target label; set to
     False for live inference where the target is unknown/in the future.
     """
-    cols_needed = ["log_return", "realized_vol"] + (["target_vol_ratio"] if require_target else [])
+    cols_needed = config.FEATURE_COLUMNS + (["target_vol_ratio"] if require_target else [])
     valid_index = None
     for frame in panel.values():
         mask = frame[cols_needed].notna().all(axis=1)

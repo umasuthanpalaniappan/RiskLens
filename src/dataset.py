@@ -140,12 +140,18 @@ class GraphSample:
 
 def build_gnn_dataset(
     panel: Dict[str, pd.DataFrame],
-    returns: pd.DataFrame,
     stats: Dict[str, Dict[str, float]],
     window: int = config.RETURN_WINDOW,
     graph_window: int = config.GRAPH_WINDOW,
 ) -> Dict[str, List[GraphSample]]:
-    """Build one graph sample per date, split chronologically train/val/test."""
+    """Build one graph sample per date, split chronologically train/val/test.
+
+    The graph edges come from rolling correlation of *realised volatility*
+    across stocks (vol-clustering/contagion structure), not raw return
+    correlation -- for a model whose whole job is predicting where
+    volatility goes next, a graph of "whose vol moves with whose" is the
+    more relevant structure than "whose returns move with whose".
+    """
     tickers = list(panel.keys())
     any_frame = panel[tickers[0]]
     dates = any_frame.index
@@ -153,6 +159,7 @@ def build_gnn_dataset(
 
     feat_mats = {t: _normalized_feature_matrix(panel[t], stats) for t in tickers}
     targets = {t: normalize(panel[t]["target_vol_ratio"].values, stats["target_vol_ratio"]) for t in tickers}
+    vol_matrix = pd.DataFrame({t: panel[t]["realized_vol"] for t in tickers})
 
     min_hist = max(window, graph_window)
     buckets: Dict[str, List[GraphSample]] = {"train": [], "val": [], "test": []}
@@ -172,10 +179,10 @@ def build_gnn_dataset(
         if not window_ok:
             continue
 
-        graph_returns_window = returns.loc[dates[i - graph_window:i]]
-        if graph_returns_window.isna().any().any():
+        graph_vol_window = vol_matrix.iloc[i - graph_window:i]
+        if graph_vol_window.isna().any().any():
             continue
-        adjacency = graph.correlation_adjacency(graph_returns_window)
+        adjacency = graph.correlation_adjacency(graph_vol_window)
         laplacian = graph.graph_laplacian(adjacency)
 
         if end_date in split.train_dates:
@@ -198,18 +205,22 @@ def build_gnn_dataset(
 
 def latest_graph_sample(
     panel: Dict[str, pd.DataFrame],
-    returns: pd.DataFrame,
     stats: Dict[str, Dict[str, float]],
     window: int = config.RETURN_WINDOW,
     graph_window: int = config.GRAPH_WINDOW,
 ) -> GraphSample:
-    """Build a single graph sample from the most recent available window (no target)."""
+    """Build a single graph sample from the most recent available window (no target).
+
+    See ``build_gnn_dataset``'s docstring for why the graph is built from
+    realised-volatility correlation rather than return correlation.
+    """
     tickers = list(panel.keys())
     feat_mats = {t: _normalized_feature_matrix(panel[t], stats) for t in tickers}
     dates = next(iter(panel.values())).index
+    vol_matrix = pd.DataFrame({t: panel[t]["realized_vol"] for t in tickers})
 
     node_feats = [feat_mats[t][-window:] for t in tickers]
-    adjacency = graph.correlation_adjacency(returns.iloc[-graph_window:])
+    adjacency = graph.correlation_adjacency(vol_matrix.iloc[-graph_window:])
     laplacian = graph.graph_laplacian(adjacency)
 
     return GraphSample(

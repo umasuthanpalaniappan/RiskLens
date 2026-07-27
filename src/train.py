@@ -129,12 +129,12 @@ def train_lstm(tickers=None, epochs: int = config.EPOCHS) -> dict:
 def train_gnn(tickers=None, epochs: int = config.EPOCHS) -> dict:
     """Train the dynamic-graph GNN and save weights + results (incl. per-node alpha)."""
     tickers = tickers or config.TICKERS
-    panel, returns = prepare_universe(tickers)
+    panel, _returns = prepare_universe(tickers)
     any_dates = next(iter(panel.values())).index
     split = dataset.chronological_split(any_dates)
     stats = _get_or_build_norm_stats(panel, split.train_dates)
 
-    graph_splits = dataset.build_gnn_dataset(panel, returns, stats)
+    graph_splits = dataset.build_gnn_dataset(panel, stats)
     train_samples = graph_splits["train"]
     val_samples = graph_splits["val"]
     test_samples = graph_splits["test"]

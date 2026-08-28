@@ -62,6 +62,7 @@ VOL_WINDOW = 5               # rolling window (days) used to realise volatility
 HORIZON = 5                  # days ahead the target volatility ratio looks
 MOMENTUM_WINDOW = 20          # trading days of cumulative return used as a momentum feature
 VOLUME_ZSCORE_WINDOW = 20     # rolling window used to z-score traded volume
+RSI_WINDOW = 14                # standard Wilder RSI lookback
 
 # --- Train/val/test split (chronological) ---
 TRAIN_FRAC = 0.7
@@ -97,7 +98,9 @@ PORTFOLIO_LONG_ONLY = True
 PORTFOLIO_MAX_WEIGHT = 0.35   # single-name cap
 PORTFOLIO_RIDGE = 1e-6        # numerical stabiliser added to the diagonal of Sigma
 
-FEATURE_COLUMNS: List[str] = ["log_return", "realized_vol", "momentum", "volume_zscore"]
+FEATURE_COLUMNS: List[str] = [
+    "log_return", "realized_vol", "momentum", "volume_zscore", "rsi", "macd_hist",
+]
 
 # Sector labels, used only for dashboard grouping/display -- no model or
 # optimizer logic depends on these.

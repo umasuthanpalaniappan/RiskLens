@@ -55,6 +55,29 @@ def volume_zscore(volume: pd.Series, window: int = config.VOLUME_ZSCORE_WINDOW) 
     return (volume - rolling_mean) / rolling_std.replace(0, np.nan)
 
 
+def rsi(price_series: pd.Series, window: int = config.RSI_WINDOW) -> pd.Series:
+    """Wilder's RSI (0-100), rescaled to [-1, 1] so it sits on the same rough
+    scale as the model's other features. RSI extremes (overbought/oversold)
+    are a classic precursor to a volatility regime change."""
+    delta = price_series.diff()
+    gain = delta.clip(lower=0).rolling(window).mean()
+    loss = (-delta.clip(upper=0)).rolling(window).mean()
+    rs = gain / loss.replace(0, np.nan)
+    rsi_raw = 100 - (100 / (1 + rs))
+    return (rsi_raw - 50) / 50
+
+
+def macd_hist(price_series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> pd.Series:
+    """MACD histogram (MACD line minus its signal line), normalised by price
+    so it's comparable across stocks at very different price levels. Captures
+    trend-strength shifts that often precede a volatility move."""
+    ema_fast = price_series.ewm(span=fast, adjust=False).mean()
+    ema_slow = price_series.ewm(span=slow, adjust=False).mean()
+    macd_line = ema_fast - ema_slow
+    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+    return (macd_line - signal_line) / price_series
+
+
 def build_stock_features(price_series: pd.Series, volume_series: pd.Series) -> pd.DataFrame:
     """Build the per-ticker feature+target frame from that ticker's price and volume series."""
     ret = log_returns(price_series.to_frame()).iloc[:, 0]
@@ -68,6 +91,8 @@ def build_stock_features(price_series: pd.Series, volume_series: pd.Series) -> p
             "realized_vol": vol,
             "momentum": momentum(ret),
             "volume_zscore": volume_zscore(volume_series),
+            "rsi": rsi(price_series),
+            "macd_hist": macd_hist(price_series),
             "target_vol_ratio": target,
         }
     )

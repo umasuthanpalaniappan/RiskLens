@@ -8,4 +8,4 @@ which is a gitignored live cache, not a versioned artifact).
 
 - `prices.csv` / `volume.csv`: date-indexed, one column per ticker
 - Range: 2011-01-03 -> 2026-08-27 (3864 trading days)
-- Regenerated: 2026-08-28 10:37 UTC
+- Regenerated: 2026-08-28 10:53 UTC

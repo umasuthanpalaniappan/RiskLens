@@ -102,10 +102,12 @@ FMCG, telecom, pharma, auto, cement, metals and power — see
 use the cache when present; `run_portfolio.py` always refreshes it, since
 it needs today's close.
 
-Each stock is represented by four features (`config.FEATURE_COLUMNS`):
+Each stock is represented by six features (`config.FEATURE_COLUMNS`):
 daily log return, trailing realised volatility, `MOMENTUM_WINDOW`-day
-cumulative return (trend), and a rolling z-score of traded volume (unusual
-activity). All four feed both the LSTM and the GNN encoder.
+cumulative return (trend), a rolling z-score of traded volume (unusual
+activity), RSI(`RSI_WINDOW`) and a price-normalised MACD histogram (both
+standard precursors to a volatility regime shift). All six feed both the
+LSTM and the GNN encoder.
 
 ### The committed dataset
 

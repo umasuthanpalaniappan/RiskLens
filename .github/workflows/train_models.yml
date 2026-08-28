@@ -35,14 +35,33 @@ jobs:
           path: data/raw/
           retention-days: 7
 
-      - name: Commit and push retrained models if changed
+      - name: Snapshot the exact dataset used for this training run
+        run: |
+          mkdir -p dataset
+          cp data/raw/prices.csv dataset/prices.csv
+          cp data/raw/volume.csv dataset/volume.csv
+          {
+            echo "# RiskLens training dataset"
+            echo
+            echo "Real daily close price and traded volume for the 18-stock NSE universe"
+            echo "(\`config.TICKERS\`), pulled from Yahoo Finance. This is the exact data"
+            echo "the currently-committed \`models/*.pt\` were trained on -- regenerated and"
+            echo "committed here each time \`train_models.yml\` runs (unlike \`data/raw/\`,"
+            echo "which is a gitignored live cache, not a versioned artifact)."
+            echo
+            echo "- \`prices.csv\` / \`volume.csv\`: date-indexed, one column per ticker"
+            echo "- Range: $(python3 -c "import pandas as pd; d=pd.read_csv('dataset/prices.csv', index_col=0); print(d.index.min(), '->', d.index.max(), f'({len(d)} trading days)')")"
+            echo "- Regenerated: $(date -u +"%Y-%m-%d %H:%M UTC")"
+          } > dataset/README.md
+
+      - name: Commit and push retrained models + dataset if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -n "$(git status --porcelain models/ results/)" ]; then
-            git add models/ results/lstm_results.json results/gnn_results.json results/norm_stats.json
-            git commit -m "chore: retrain LSTM+GNN on live NSE data ($(date -u +%Y-%m-%d))"
+          if [ -n "$(git status --porcelain models/ results/ dataset/)" ]; then
+            git add models/ results/lstm_results.json results/gnn_results.json results/norm_stats.json dataset/
+            git commit -m "chore: retrain LSTM+GNN on live NSE data, refresh dataset snapshot ($(date -u +%Y-%m-%d))"
             git push
           else
-            echo "No changes in models/ or results/, skipping commit."
+            echo "No changes in models/, results/ or dataset/, skipping commit."
           fi

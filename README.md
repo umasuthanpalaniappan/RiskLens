@@ -101,6 +101,16 @@ daily log return, trailing realised volatility, `MOMENTUM_WINDOW`-day
 cumulative return (trend), and a rolling z-score of traded volume (unusual
 activity). All four feed both the LSTM and the GNN encoder.
 
+### The committed dataset
+
+`data/raw/` is a gitignored *live cache* — it exists so repeated local runs
+don't re-hit the network, not as a versioned artifact. For a fixed,
+inspectable copy of the actual data the currently-committed `models/*.pt`
+were trained on, see [`dataset/`](dataset/): `dataset/prices.csv` and
+`dataset/volume.csv` are a snapshot of the real 18-stock, ~15-year NSE
+history, regenerated and committed automatically every time
+`train_models.yml` runs (see `dataset/README.md` for the exact date range).
+
 History spans `config.START_DATE` (2011-01-01, ~15 years) to today.
 `run_portfolio.py`'s daily refresh always re-downloads that full span (not
 just a short live window) before persisting the cache, specifically so the

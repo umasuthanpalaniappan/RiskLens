@@ -10,17 +10,27 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import time
 from typing import List, Optional, Tuple
 
 import pandas as pd
 
 from src import config
 
+_DOWNLOAD_RETRIES = 3
+_DOWNLOAD_RETRY_DELAY_SECONDS = 5
+
 
 def _download(tickers: List[str], start: str, end: Optional[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Download adjusted close prices and volume for ``tickers`` via yfinance.
 
     Returns ``(prices, volumes)``, each indexed by date with one column per ticker.
+
+    ``threads=False`` forces yfinance to fetch tickers sequentially rather
+    than from a thread pool -- with threading on, concurrent tickers can
+    write to yfinance's internal SQLite response cache at the same time and
+    intermittently fail with "database is locked", which has nothing to do
+    with any ticker actually being delisted.
     """
     import yfinance as yf
 
@@ -31,6 +41,7 @@ def _download(tickers: List[str], start: str, end: Optional[str]) -> Tuple[pd.Da
         auto_adjust=True,
         progress=False,
         group_by="ticker",
+        threads=False,
     )
     if isinstance(raw.columns, pd.MultiIndex):
         present = [t for t in tickers if t in raw.columns.get_level_values(0)]
@@ -49,11 +60,32 @@ def _download(tickers: List[str], start: str, end: Optional[str]) -> Tuple[pd.Da
     empty = [t for t in tickers if t not in prices.columns or prices[t].dropna().empty]
     if empty:
         raise ValueError(
-            f"yfinance returned no data for: {empty}. A ticker may have been delisted, "
-            f"renamed, or suspended (e.g. after a merger/demerger) -- replace it in "
-            f"config.TICKERS (and config.SECTOR_MAP) and retrain."
+            f"yfinance returned no data for: {empty}. This can be a transient "
+            f"fetch failure (retry), or a ticker that was actually delisted, "
+            f"renamed, or suspended (e.g. after a merger/demerger) -- if it's "
+            f"the latter, replace it in config.TICKERS (and config.SECTOR_MAP) "
+            f"and retrain."
         )
     return prices, volumes
+
+
+def _download_with_retries(tickers: List[str], start: str, end: Optional[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Retry ``_download`` a few times before giving up.
+
+    yfinance downloads occasionally fail transiently on CI runners (rate
+    limiting, its internal SQLite cache momentarily locked, a flaky
+    connection) with no real data-availability problem behind them.
+    """
+    last_error: Optional[Exception] = None
+    for attempt in range(1, _DOWNLOAD_RETRIES + 1):
+        try:
+            return _download(tickers, start, end)
+        except Exception as exc:  # noqa: BLE001 -- deliberately broad: retry any transient failure
+            last_error = exc
+            if attempt < _DOWNLOAD_RETRIES:
+                time.sleep(_DOWNLOAD_RETRY_DELAY_SECONDS * attempt)
+    assert last_error is not None
+    raise last_error
 
 
 def fetch_price_volume(
@@ -73,7 +105,7 @@ def fetch_price_volume(
             return prices[tickers], volumes[tickers]
 
     end = end or dt.date.today().isoformat()
-    prices, volumes = _download(tickers, start, end)
+    prices, volumes = _download_with_retries(tickers, start, end)
     prices = prices.dropna(how="all")
     volumes = volumes.reindex(prices.index)
     prices.to_csv(config.RAW_DATA_PATH)

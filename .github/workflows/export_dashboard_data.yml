@@ -1,7 +1,10 @@
-name: Export dashboard showcase data
+name: Refresh web/data.json
 
 on:
   workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   export:
@@ -19,5 +22,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Export aggregated real market data to logs
+      - name: Export web/data.json for the Vercel dashboard
         run: python scripts/export_dashboard_data.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain web/data.json)" ]; then
+            git add web/data.json
+            git commit -m "chore: refresh web/data.json"
+            git push
+          else
+            echo "No changes in web/data.json, skipping commit."
+          fi

@@ -616,20 +616,32 @@ document.getElementById('gnnCallout').innerHTML = `
 
 let sortKey = 'weight', sortDir = -1;
 const COLS = [
-  { key: 'stock', label: 'Stock' }, { key: 'sector', label: 'Sector' }, { key: 'price', label: 'Live Price' },
+  { key: 'stock', label: 'Stock' }, { key: 'sector', label: 'Sector' }, { key: 'price', label: 'Live Price' }, { key: 'change', label: 'Day Change' },
   { key: 'vol', label: 'Predicted Vol' }, { key: 'weight', label: 'Portfolio Weight' }, { key: 'alpha', label: 'GNN Gate Alpha' },
 ];
 function lastRealPrice(t) { const arr = HIST.series[t].price; return arr[arr.length - 1]; }
+function dayChangePct(t) {
+  const arr = HIST.series[t].price.filter(v => v != null);
+  if (arr.length < 2) return null;
+  return (arr[arr.length - 1] / arr[arr.length - 2] - 1) * 100;
+}
+function fiftyTwoWeekRange(t) {
+  const arr = HIST.series[t].price.slice(-252).filter(v => v != null);
+  if (!arr.length) return { hi: null, lo: null };
+  return { hi: Math.max(...arr), lo: Math.min(...arr) };
+}
 function renderTable(tickers) {
   const rows = tickers.map(t => ({ stock: shortTicker(t), sector: SECTOR_MAP[t] || 'Other', price: lastRealPrice(t),
-    vol: PORTFOLIO.predicted_volatility[t], weight: PORTFOLIO.weights[t], alpha: GNN.alpha[t] }));
+    change: dayChangePct(t), vol: PORTFOLIO.predicted_volatility[t], weight: PORTFOLIO.weights[t], alpha: GNN.alpha[t] }));
   rows.sort((a, b) => (a[sortKey] > b[sortKey] ? 1 : a[sortKey] < b[sortKey] ? -1 : 0) * sortDir);
   const maxWeight = Math.max(...PORTFOLIO.tickers.map(t => PORTFOLIO.weights[t]));
   const table = document.getElementById('stockTable');
-  if (!rows.length) { table.innerHTML = `<tbody><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">No stocks match the current filters.</td></tr></tbody>`; return; }
+  if (!rows.length) { table.innerHTML = `<tbody><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">No stocks match the current filters.</td></tr></tbody>`; return; }
   const thead = `<thead><tr>${COLS.map(c => `<th data-key="${c.key}" class="${sortKey === c.key ? 'sorted' : ''}">${c.label}<span class="arrow">${sortKey === c.key ? (sortDir === 1 ? '▲' : '▼') : '↕'}</span></th>`).join('')}</tr></thead>`;
   const tbody = `<tbody>${rows.map(r => `<tr><td>${r.stock}</td><td><span class="sector-chip">${r.sector}</span></td>
-    <td class="num">₹${r.price.toFixed(2)}</td><td class="num">${fmtPct(r.vol)}</td>
+    <td class="num">₹${r.price.toFixed(2)}</td>
+    <td class="num" style="color:${r.change == null ? 'var(--muted)' : (r.change >= 0 ? 'var(--good)' : 'var(--critical)')}">${r.change == null ? '—' : (r.change >= 0 ? '+' : '') + r.change.toFixed(2) + '%'}</td>
+    <td class="num">${fmtPct(r.vol)}</td>
     <td class="num"><span class="mini-bar"><span style="width:${(r.weight/maxWeight)*100}%"></span></span>${fmtPct(r.weight)}</td>
     <td class="num">${r.alpha.toFixed(2)}</td></tr>`).join('')}</tbody>`;
   table.innerHTML = thead + tbody;
@@ -736,8 +748,12 @@ function sliceForRange(arr) { if (explorerRange === 'max') return arr; const n =
 function renderExplorer() {
   const t = explorerTicker, s = HIST.series[t];
   const lastPrice = s.price[s.price.length - 1];
+  const change = dayChangePct(t);
+  const { hi, lo } = fiftyTwoWeekRange(t);
   document.getElementById('explorerStats').innerHTML = [
     ['Sector', SECTOR_MAP[t] || 'Other'], ['Live Price', `₹${lastPrice.toFixed(2)}`],
+    ['Day Change', change == null ? '—' : `<span style="color:${change >= 0 ? 'var(--good)' : 'var(--critical)'}">${change >= 0 ? '+' : ''}${change.toFixed(2)}%</span>`],
+    ['52W High', hi == null ? '—' : `₹${hi.toFixed(2)}`], ['52W Low', lo == null ? '—' : `₹${lo.toFixed(2)}`],
     ['Predicted Vol', fmtPct(PORTFOLIO.predicted_volatility[t])], ['Portfolio Weight', fmtPct(PORTFOLIO.weights[t])],
     ['GNN Gate Alpha', GNN.alpha[t].toFixed(2)],
   ].map(([l, v]) => `<div class="stat-tile"><div class="l">${l}</div><div class="v">${v}</div></div>`).join('');

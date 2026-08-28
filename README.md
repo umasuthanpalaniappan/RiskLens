@@ -28,8 +28,14 @@ Streamlit dashboard.
    Markowitz).
 3. **Classify the regime.** Bucket today's market-wide volatility into
    calm / normal / crisis based on trailing quantiles.
-4. **Show it.** A single-page Streamlit dashboard reads the JSON results and
-   renders weights, per-stock detail, and a model-comparison chart.
+4. **Show it.** Two dashboards read the same JSON results: `app/dashboard.py`
+   is a local Streamlit app for development, and `web/index.html` is a
+   static site (deployed on Vercel) that is the superset of it — every
+   Streamlit tab's content (portfolio weights, sector allocation, stock
+   detail, model-comparison charts, correlation heatmap, historical trends)
+   plus a Recommendation tab and a full per-stock Stock Explorer, all fed by
+   `web/data.json`, which the CI workflows regenerate and commit on every
+   real data refresh so Vercel's Git integration redeploys automatically.
 5. **Automate it.** A daily GitHub Actions workflow re-runs the live
    portfolio step after the NSE market closes and commits any changed
    results.

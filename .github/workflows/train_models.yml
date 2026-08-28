@@ -28,6 +28,9 @@ jobs:
       - name: Train dynamic GNN
         run: python scripts/run_gnn.py
 
+      - name: Export web/data.json for the Vercel dashboard
+        run: python scripts/export_dashboard_data.py
+
       - name: Upload real price/volume cache as a build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -58,10 +61,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -n "$(git status --porcelain models/ results/ dataset/)" ]; then
-            git add models/ results/lstm_results.json results/gnn_results.json results/norm_stats.json dataset/
+          if [ -n "$(git status --porcelain models/ results/ dataset/ web/data.json)" ]; then
+            git add models/ results/lstm_results.json results/gnn_results.json results/norm_stats.json dataset/ web/data.json
             git commit -m "chore: retrain LSTM+GNN on live NSE data, refresh dataset snapshot ($(date -u +%Y-%m-%d))"
             git push
           else
-            echo "No changes in models/, results/ or dataset/, skipping commit."
+            echo "No changes in models/, results/, dataset/ or web/data.json, skipping commit."
           fi

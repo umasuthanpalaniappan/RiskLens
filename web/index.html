@@ -1,0 +1,828 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RiskLens — Volatility-Aware Portfolio Construction</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E" />
+<style>
+  :root {
+    color-scheme: light;
+    --surface:  #fcfcfb;
+    --page:     #f9f9f7;
+    --ink:      #0b0b0b;
+    --ink-2:    #52514e;
+    --muted:    #898781;
+    --grid:     #e1e0d9;
+    --baseline: #c3c2b7;
+    --border:   rgba(11,11,11,0.10);
+    --s1: #2a78d6;
+    --s2: #eb6834;
+    --s3: #1baf7a;
+    --seq-100: #cde2fb; --seq-250: #86b6ef; --seq-400: #3987e5; --seq-550: #1c5cab; --seq-650: #104281;
+    --div-cool: #2a78d6; --div-warm: #e34948; --div-mid: #f0efec;
+    --good: #0ca30c; --warning: #fab219; --critical: #d03b3b;
+    --shadow: 0 1px 2px rgba(11,11,11,0.04), 0 8px 24px -12px rgba(11,11,11,0.18);
+    --hero-grad-1: #eef3fb; --hero-grad-2: #f9f9f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface:  #1a1a19; --page: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
+      --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+      --seq-100: #104281; --seq-250: #184f95; --seq-400: #3987e5; --seq-550: #86b6ef; --seq-650: #cde2fb;
+      --div-cool: #3987e5; --div-warm: #e66767; --div-mid: #383835;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+      --hero-grad-1: #132132; --hero-grad-2: #0d0d0d;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface: #1a1a19; --page: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+    --seq-100: #104281; --seq-250: #184f95; --seq-400: #3987e5; --seq-550: #86b6ef; --seq-650: #cde2fb;
+    --div-cool: #3987e5; --div-warm: #e66767; --div-mid: #383835;
+    --hero-grad-1: #132132; --hero-grad-2: #0d0d0d;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --surface: #fcfcfb; --page: #f9f9f7; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --baseline: #c3c2b7; --border: rgba(11,11,11,0.10);
+    --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+    --seq-100: #cde2fb; --seq-250: #86b6ef; --seq-400: #3987e5; --seq-550: #1c5cab; --seq-650: #104281;
+    --div-cool: #2a78d6; --div-warm: #e34948; --div-mid: #f0efec;
+    --hero-grad-1: #eef3fb; --hero-grad-2: #f9f9f7;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--page); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { text-wrap: balance; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 20px; }
+
+  .hero { background: linear-gradient(180deg, var(--hero-grad-1), var(--hero-grad-2) 85%); padding: 64px 0 44px; border-bottom: 1px solid var(--grid); }
+  .hero-inner { max-width: 1180px; margin: 0 auto; padding: 0 20px; }
+  .hero-eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--s1); background: color-mix(in srgb, var(--s1) 12%, transparent); padding: 6px 12px; border-radius: 999px; margin-bottom: 18px; }
+  .hero h1 { font-size: clamp(38px, 6vw, 62px); font-weight: 800; letter-spacing: -0.03em; margin: 0 0 14px; line-height: 1.02; }
+  .hero h1 .accent { background: linear-gradient(120deg, var(--s1), var(--s3)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero p.lede { font-size: 18px; line-height: 1.55; color: var(--ink-2); max-width: 640px; margin: 0 0 30px; }
+  .hero-stats { display: flex; gap: 28px; flex-wrap: wrap; margin-bottom: 8px; }
+  .hero-stat .num { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .hero-stat .lbl { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+
+  .methodology { padding: 56px 0; border-bottom: 1px solid var(--grid); }
+  .section-head { max-width: 640px; margin-bottom: 32px; }
+  .section-kicker { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--s1); margin-bottom: 8px; }
+  .section-head h2 { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 10px; }
+  .section-head p { color: var(--ink-2); font-size: 15px; line-height: 1.6; margin: 0; }
+  .pipeline { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; background: var(--grid); border-radius: 14px; overflow: hidden; border: 1px solid var(--grid); }
+  @media (max-width: 980px) { .pipeline { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 620px) { .pipeline { grid-template-columns: 1fr; } }
+  .pipe-step { background: var(--surface); padding: 22px 18px; }
+  .pipe-step .n { font-size: 11px; font-weight: 800; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: 0.05em; }
+  .pipe-step h3 { font-size: 15px; font-weight: 700; margin: 8px 0 6px; }
+  .pipe-step p { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); margin: 0; }
+  .pipe-step code { font-size: 11px; background: var(--page); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border); }
+  .rationale { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 780px) { .rationale { grid-template-columns: 1fr; } }
+  .rationale .box { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; box-shadow: var(--shadow); }
+  .rationale .box h3 { font-size: 15px; margin: 0 0 8px; }
+  .rationale .box p { font-size: 13.5px; line-height: 1.65; color: var(--ink-2); margin: 0; }
+
+  .dashboard-shell { padding: 52px 0 80px; }
+  #tooltip { position: fixed; pointer-events: none; z-index: 50; background: var(--ink); color: var(--page); font-size: 12px; line-height: 1.45; padding: 8px 10px; border-radius: 8px; box-shadow: var(--shadow); opacity: 0; transform: translateY(4px); transition: opacity 0.1s ease, transform 0.1s ease; max-width: 240px; }
+  #tooltip.show { opacity: 1; transform: translateY(0); }
+  #tooltip b { font-weight: 700; }
+  #tooltip .row { display: flex; justify-content: space-between; gap: 12px; }
+
+  .refresh-banner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin-bottom: 20px; box-shadow: var(--shadow); font-size: 12.5px; color: var(--ink-2); }
+  .refresh-banner .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); flex: none; }
+  .refresh-banner b { color: var(--ink); }
+  .refresh-banner a { color: var(--s1); text-decoration: none; font-weight: 600; }
+  .refresh-banner a:hover { text-decoration: underline; }
+
+  header.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 22px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .mark { width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(160deg, var(--s1), var(--s3)); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 18px; letter-spacing: -0.02em; flex: none; }
+  .brand h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; margin: 0; }
+  .brand p.tag { margin: 2px 0 0; color: var(--ink-2); font-size: 13px; }
+  .regime-pill { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); min-width: 168px; }
+  .regime-pill .dot { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+  .regime-pill .label { font-weight: 700; font-size: 14.5px; letter-spacing: 0.02em; }
+  .regime-pill .sub { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 26px; }
+  @media (max-width: 760px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); }
+  .kpi .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .kpi .value { font-size: 21px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+  .tabbar { display: flex; gap: 4px; border-bottom: 1px solid var(--grid); margin-bottom: 22px; overflow-x: auto; }
+  .tabbtn { appearance: none; border: none; background: none; cursor: pointer; white-space: nowrap; font: inherit; font-size: 14px; font-weight: 600; color: var(--muted); padding: 10px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; display: flex; align-items: center; gap: 7px; }
+  .tabbtn:hover { color: var(--ink); }
+  .tabbtn.active { color: var(--ink); border-bottom-color: var(--s1); }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .grid2 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 20px; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+  section.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; box-shadow: var(--shadow); margin-bottom: 20px; }
+  section.card h2 { font-size: 15.5px; font-weight: 700; margin: 0 0 3px; }
+  section.card p.hint { margin: 0 0 16px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+
+  .filter-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+  .filter-bar .flabel { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; margin-right: 2px; }
+  .chip { appearance: none; cursor: pointer; border: 1px solid var(--border); background: var(--page); color: var(--ink-2); font: inherit; font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 999px; }
+  .chip.active { background: var(--s1); border-color: var(--s1); color: #fff; }
+  .filter-search { flex: 1; min-width: 160px; max-width: 240px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--page); color: var(--ink); font: inherit; font-size: 13px; }
+  .filter-reset { margin-left: auto; background: none; border: none; color: var(--s1); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .filter-count { font-size: 12px; color: var(--muted); }
+
+  .chart-toggle { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .chart-toggle button { appearance: none; border: 1px solid var(--border); background: var(--page); color: var(--ink-2); font: inherit; font-size: 12.5px; font-weight: 600; padding: 5px 12px; border-radius: 999px; cursor: pointer; }
+  .chart-toggle button.active { background: var(--s1); border-color: var(--s1); color: #fff; }
+
+  .barchart { width: 100%; }
+  .bar-row { display: flex; align-items: center; gap: 10px; height: 26px; }
+  .bar-row .name { width: 108px; flex: none; font-size: 12px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; }
+  .bar-track { flex: 1; height: 14px; background: var(--grid); border-radius: 4px; position: relative; overflow: hidden; }
+  .bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px 2px 2px 4px; cursor: pointer; }
+  .bar-value { width: 56px; flex: none; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+  .legend .item { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
+  .legend .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+  svg.cmp { width: 100%; height: auto; overflow: visible; }
+  .cmp-bar { cursor: pointer; }
+  .cmp-value { font-size: 13px; font-weight: 700; fill: var(--ink); font-variant-numeric: tabular-nums; }
+  .cmp-label { font-size: 11.5px; fill: var(--ink-2); }
+  .cmp-axis-line { stroke: var(--baseline); stroke-width: 1; stroke-dasharray: 3 3; }
+  .cmp-axis-label { font-size: 10.5px; fill: var(--muted); }
+
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+  table.data { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 620px; }
+  table.data th, table.data td { padding: 9px 12px; text-align: right; white-space: nowrap; }
+  table.data th:first-child, table.data td:first-child, table.data th:nth-child(2), table.data td:nth-child(2) { text-align: left; }
+  table.data thead th { position: sticky; top: 0; background: var(--surface); color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; border-bottom: 1px solid var(--grid); cursor: pointer; user-select: none; }
+  table.data thead th:hover { color: var(--ink); }
+  table.data thead th .arrow { font-size: 9px; margin-left: 3px; opacity: 0.5; }
+  table.data thead th.sorted .arrow { opacity: 1; color: var(--s1); }
+  table.data tbody tr { border-bottom: 1px solid var(--grid); }
+  table.data tbody tr:hover { background: var(--page); }
+  table.data td.num { font-variant-numeric: tabular-nums; }
+  .sector-chip { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--page); color: var(--ink-2); border: 1px solid var(--border); }
+  .mini-bar { display: inline-block; width: 64px; height: 6px; background: var(--grid); border-radius: 3px; position: relative; vertical-align: middle; margin-right: 8px; }
+  .mini-bar span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; background: var(--seq-400); }
+
+  .pager { display: flex; align-items: center; gap: 10px; justify-content: flex-end; margin-top: 12px; font-size: 12.5px; color: var(--ink-2); }
+  .pager button { appearance: none; border: 1px solid var(--border); background: var(--page); color: var(--ink); font: inherit; font-size: 12.5px; padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+  .pager button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  svg.linechart { width: 100%; height: auto; overflow: visible; }
+  .lc-line { fill: none; stroke-width: 2; }
+  .lc-area { opacity: 0.12; }
+  .lc-grid { stroke: var(--grid); stroke-width: 1; }
+  .lc-axis-label { font-size: 10.5px; fill: var(--muted); }
+  .lc-hitlayer { fill: transparent; cursor: crosshair; }
+  svg.heatmap rect.cell { cursor: pointer; }
+  .heatmap-label { font-size: 9px; fill: var(--ink-2); }
+  .ribbon-seg { cursor: pointer; }
+
+  .stat-tile-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
+  @media (max-width: 900px) { .stat-tile-row { grid-template-columns: repeat(2, 1fr); } }
+  .stat-tile { background: var(--page); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .stat-tile .l { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+  .stat-tile .v { font-size: 17px; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+  select.stockpick { appearance: none; border: 1px solid var(--border); background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; padding: 7px 30px 7px 12px; border-radius: 10px; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23898781'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
+
+  .empty-note { padding: 22px; text-align: center; color: var(--muted); font-size: 13px; border: 1px dashed var(--border); border-radius: 10px; background: var(--page); }
+  .callout { margin-top: 4px; padding: 12px 14px; border-radius: 10px; background: var(--page); border: 1px solid var(--border); font-size: 12.5px; color: var(--ink-2); line-height: 1.55; }
+  .callout b { color: var(--ink); }
+  .callout.warn { border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); background: color-mix(in srgb, var(--warning) 8%, var(--page)); }
+
+  .reco-hero { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  .reco-gauge { flex: none; width: 140px; height: 140px; position: relative; }
+  .reco-gauge svg { width: 100%; height: 100%; }
+  .reco-gauge .center-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .reco-gauge .center-label .n { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .reco-gauge .center-label .l { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .reco-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin: 16px 0; }
+  .reco-card { background: var(--page); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .reco-card .t { font-weight: 700; font-size: 13.5px; }
+  .reco-card .s { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .reco-card .w { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .reco-card .reason { font-size: 11.5px; color: var(--ink-2); margin-top: 4px; line-height: 1.4; }
+
+  footer.foot { border-top: 1px solid var(--grid); padding: 40px 0 60px; }
+  .foot-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
+  .foot-brand { font-weight: 800; font-size: 15px; }
+  .stack-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+  .stack-pill { font-size: 11.5px; font-weight: 600; padding: 5px 11px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); color: var(--ink-2); }
+  .foot-meta { color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-top: 16px; border-top: 1px solid var(--grid); }
+  .theme-toggle { appearance: none; border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); font: inherit; font-size: 12px; padding: 5px 10px; border-radius: 8px; cursor: pointer; }
+  #loadState { padding: 80px 20px; text-align: center; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div id="loadState">Loading real market data…</div>
+<div id="app" style="display:none;">
+<div id="tooltip"></div>
+
+<section class="hero">
+  <div class="hero-inner">
+    <span class="hero-eyebrow">● Real NSE data &middot; refreshed daily via GitHub Actions</span>
+    <h1>Volatility is the signal.<br><span class="accent">RiskLens</span> turns it into a portfolio.</h1>
+    <p class="lede">
+      An LSTM forecasts each stock's near-term volatility from its own history. A dynamic graph neural
+      network refines that forecast using how volatility moves <em>between</em> stocks. The result feeds a
+      long-only minimum-variance optimiser that rebalances automatically, every trading day, on real market data.
+    </p>
+    <div class="hero-stats" id="heroStats"></div>
+  </div>
+</section>
+
+<section class="methodology">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="section-kicker">How it works</div>
+      <h2>From raw prices to portfolio weights</h2>
+      <p>Six stages, each doing one job. Nothing here is a black box &mdash; every arrow below is a real function in the codebase.</p>
+    </div>
+    <div class="pipeline">
+      <div class="pipe-step"><span class="n">01</span><h3>Data</h3><p>Daily close &amp; volume for 18 NSE large/mid-caps, pulled live via <code>yfinance</code>, spanning ~15 years.</p></div>
+      <div class="pipe-step"><span class="n">02</span><h3>Features</h3><p>Log returns, realised volatility, 20-day momentum, and a volume z-score &mdash; computed per stock, per day.</p></div>
+      <div class="pipe-step"><span class="n">03</span><h3>Graph</h3><p>A rolling 60-day <em>volatility-correlation</em> graph links stocks whose risk moves together &mdash; not just their prices.</p></div>
+      <div class="pipe-step"><span class="n">04</span><h3>LSTM</h3><p>A single-stock LSTM forecasts each stock's volatility ratio from its own history alone &mdash; the baseline.</p></div>
+      <div class="pipe-step"><span class="n">05</span><h3>Dynamic GNN</h3><p>A graph convolution refines that forecast using neighbours in the graph. A learned per-stock gate decides how much to trust it.</p></div>
+      <div class="pipe-step"><span class="n">06</span><h3>Portfolio</h3><p>Predicted volatilities + real correlations build &Sigma;. A long-only optimiser solves for minimum variance.</p></div>
+    </div>
+    <div class="rationale">
+      <div class="box"><h3>Why volatility, not returns?</h3><p>Forecasting <em>returns</em> reliably is a much harder, noisier problem than forecasting <em>volatility</em>, which is well known to cluster and be comparatively predictable. RiskLens is honest about only tackling the tractable half of that problem.</p></div>
+      <div class="box"><h3>Why minimum-variance, not Markowitz?</h3><p>Classic mean-variance optimisation needs a return forecast too. Since these models predict volatility only, fabricating a return forecast just to run a "real" Markowitz optimiser would mean optimising against a made-up number. Minimum-variance is the honest optimisation for what's actually being forecast.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="dashboard-shell">
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="mark">R</div>
+      <div><h1>Live dashboard</h1><p class="tag">Deployed on Vercel, redeployed automatically on every real data refresh</p></div>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <div class="regime-pill" id="regimePill"></div>
+      <button class="theme-toggle" id="themeToggle" title="Toggle light/dark">◐ Theme</button>
+    </div>
+  </header>
+
+  <div class="refresh-banner" id="refreshBanner"></div>
+  <div class="kpis" id="kpiRow"></div>
+
+  <div class="tabbar" id="tabbar">
+    <button class="tabbtn active" data-tab="portfolio">📊 Portfolio</button>
+    <button class="tabbtn" data-tab="recommendation">✅ Recommendation</button>
+    <button class="tabbtn" data-tab="models">🧠 Model Performance</button>
+    <button class="tabbtn" data-tab="explorer">🔍 Stock Explorer</button>
+    <button class="tabbtn" data-tab="market">🗺️ Market Overview</button>
+  </div>
+
+  <div class="panel active" id="panel-portfolio">
+    <div class="filter-bar" id="filterBar"></div>
+    <div class="grid2">
+      <section class="card"><h2>Portfolio weights</h2><p class="hint">Long-only minimum-variance allocation, sized by weight (darker = larger).</p><div class="barchart" id="weightBars"></div></section>
+      <section class="card"><h2>Risk contribution</h2><p class="hint">Share of total portfolio variance each stock contributes &mdash; via &Sigma; built from real predicted vol &times; real 60-day correlation.</p><div class="barchart" id="riskBars"></div></section>
+    </div>
+    <section class="card"><h2>Sector allocation</h2><p class="hint">Portfolio weight summed by sector.</p><div class="barchart" id="sectorBars"></div></section>
+    <section class="card">
+      <h2>Stock-level detail</h2>
+      <p class="hint">Click a column header to sort. "Live Price" is the most recent real daily close on file. GNN gate alpha: 0 = pure LSTM signal, 1 = pure graph-convolved signal.</p>
+      <div class="table-wrap"><table class="data" id="stockTable"></table></div>
+    </section>
+  </div>
+
+  <div class="panel" id="panel-recommendation">
+    <section class="card"><h2>Today's recommended allocation</h2><p class="hint">The minimum-variance solution for <span id="recoAsOf"></span>, given today's predicted volatilities and regime.</p><div class="reco-list" id="recoList"></div></section>
+    <section class="card">
+      <div class="reco-hero">
+        <div class="reco-gauge"><svg id="recoGauge" viewBox="0 0 140 140"></svg><div class="center-label" id="recoGaugeLabel"></div></div>
+        <div style="flex:1; min-width:260px;"><h2 style="margin-bottom:6px;">How true can this be?</h2><p class="hint" style="margin-bottom:0;">An honest reliability read, not a sales pitch.</p></div>
+      </div>
+      <div class="callout warn" id="recoHonesty"></div>
+      <div class="callout" style="margin-top:12px;"><b>This is not financial advice.</b> RiskLens is a research/educational project. It forecasts volatility, not returns, and the minimum-variance portfolio it produces makes no claim about expected performance. Backtested direction accuracy measures a narrow thing (5-day volatility direction) on historical data only. Do not act on this output without independent judgement.</div>
+    </section>
+  </div>
+
+  <div class="panel" id="panel-models">
+    <section class="card">
+      <h2>Direction accuracy: LSTM vs. LSTM + GNN</h2>
+      <p class="hint">Fraction of held-out test days the model correctly called whether realised volatility over the next 5 days would rise or fall. Dashed line = coin flip (50%).</p>
+      <div class="legend"><span class="item"><span class="swatch" style="background:var(--s1)"></span>LSTM (baseline)</span><span class="item"><span class="swatch" style="background:var(--s3)"></span>LSTM + GNN (deployed)</span></div>
+      <svg class="cmp" id="accChart" viewBox="0 0 560 220"></svg>
+    </section>
+    <section class="card">
+      <h2>GNN internals: which head is doing the work?</h2>
+      <p class="hint">The deployed model blends an LSTM-only head with a graph-convolution-only head via a learned per-stock gate.</p>
+      <div class="legend"><span class="item"><span class="swatch" style="background:var(--s1)"></span>LSTM-only head</span><span class="item"><span class="swatch" style="background:var(--s2)"></span>GNN-only head</span><span class="item"><span class="swatch" style="background:var(--s3)"></span>Blended (deployed)</span></div>
+      <svg class="cmp" id="internalsChart" viewBox="0 0 560 220"></svg>
+      <div class="callout" id="gnnCallout"></div>
+    </section>
+    <section class="card"><h2>Per-stock GNN gate alpha</h2><p class="hint">Diverging around 0.5 &mdash; blue leans toward trusting the LSTM signal, red leans toward trusting the graph signal.</p><div class="barchart" id="alphaBars"></div></section>
+  </div>
+
+  <div class="panel" id="panel-explorer">
+    <section class="card">
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:4px;">
+        <div><h2 style="margin-bottom:2px;">Stock Explorer</h2><p class="hint" style="margin-bottom:0;">Real daily price, volume &amp; volatility history &mdash; full ~15-year record, every stock.</p></div>
+        <select class="stockpick" id="explorerPicker"></select>
+      </div>
+      <div class="stat-tile-row" id="explorerStats"></div>
+      <div class="chart-toggle" id="explorerLookback">
+        <button data-range="252">1Y</button><button data-range="756">3Y</button><button data-range="1260">5Y</button><button data-range="2520">10Y</button><button class="active" data-range="max">Max</button>
+      </div>
+      <svg class="linechart" id="explorerPriceChart" viewBox="0 0 900 240"></svg>
+      <div style="height:18px;"></div>
+      <svg class="linechart" id="explorerVolChart" viewBox="0 0 900 160"></svg>
+    </section>
+    <section class="card">
+      <h2>Raw daily data</h2>
+      <p class="hint">Close price, volume, daily return and trailing realised volatility &mdash; full real history, newest first.</p>
+      <div class="table-wrap"><table class="data" id="explorerTable"></table></div>
+      <div class="pager" id="explorerPager"></div>
+    </section>
+  </div>
+
+  <div class="panel" id="panel-market">
+    <section class="card"><h2>Correlation structure (most recent 60-day window)</h2><p class="hint">The same rolling correlation window portfolio.py uses to build &Sigma;. Diverging: blue = negative, red = positive.</p><svg class="heatmap" id="corrHeatmap" viewBox="0 0 620 620"></svg></section>
+    <section class="card">
+      <h2>Regime history</h2>
+      <p class="hint">Equal-weight average realised volatility across the universe, classified calm / normal / crisis against its own trailing 3-year quantiles.</p>
+      <div class="legend"><span class="item"><span class="swatch" style="background:var(--good)"></span>Calm</span><span class="item"><span class="swatch" style="background:var(--warning)"></span>Normal</span><span class="item"><span class="swatch" style="background:var(--critical)"></span>Crisis</span></div>
+      <svg class="linechart" id="regimeRibbon" viewBox="0 0 900 60"></svg>
+      <div style="height:10px;"></div>
+      <svg class="linechart" id="regimeVolChart" viewBox="0 0 900 160"></svg>
+    </section>
+  </div>
+
+  <div class="foot-meta"><span id="lastUpdated"></span><span>Universe: 18 NSE large/mid-caps &middot; trained on 15 years of history</span></div>
+</div>
+</section>
+
+<footer class="foot">
+  <div class="wrap">
+    <div class="foot-top">
+      <div class="foot-brand">📈 RiskLens</div>
+      <div class="stack-pills"><span class="stack-pill">PyTorch</span><span class="stack-pill">Streamlit</span><span class="stack-pill">GitHub Actions</span><span class="stack-pill">Vercel</span><span class="stack-pill">yfinance</span><span class="stack-pill">SciPy (SLSQP)</span></div>
+    </div>
+    <div class="callout">
+      This page is served as a static site on Vercel, reading <code>web/data.json</code> &mdash; committed and
+      refreshed automatically by <code>.github/workflows/daily_update.yml</code> every day at 18:00 IST. When
+      Vercel's Git integration is connected to this repo, every such commit triggers a real redeploy: no manual
+      steps, no fake client-side polling.
+    </div>
+  </div>
+</footer>
+</div>
+
+<script>
+const REGIME_STYLE = {
+  calm:   { color: 'var(--good)',     label: 'CALM' },
+  normal: { color: 'var(--warning)',  label: 'NORMAL' },
+  crisis: { color: 'var(--critical)', label: 'CRISIS' },
+};
+
+let PORTFOLIO, GNN, LSTM, SECTOR_MAP, HIST;
+
+const tooltip = () => document.getElementById('tooltip');
+function showTip(evt, html) { const t = tooltip(); t.innerHTML = html; t.classList.add('show'); moveTip(evt); }
+function moveTip(evt) {
+  const t = tooltip(); const pad = 14; let x = evt.clientX + pad, y = evt.clientY + pad;
+  const rect = t.getBoundingClientRect();
+  if (x + rect.width > window.innerWidth) x = evt.clientX - rect.width - pad;
+  if (y + rect.height > window.innerHeight) y = evt.clientY - rect.height - pad;
+  t.style.left = x + 'px'; t.style.top = y + 'px';
+}
+function hideTip() { tooltip().classList.remove('show'); }
+function fmtPct(v, digits = 1) { return (v * 100).toFixed(digits) + '%'; }
+function shortTicker(t) { return t.replace('.NS', ''); }
+function fmtNum(v) { return v == null ? '—' : v.toLocaleString(); }
+
+fetch('./data.json')
+  .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+  .then(payload => {
+    PORTFOLIO = payload.portfolio; GNN = payload.gnn; LSTM = payload.lstm;
+    SECTOR_MAP = payload.sector_map; HIST = payload.market;
+    document.getElementById('loadState').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    initApp();
+  })
+  .catch(err => {
+    document.getElementById('loadState').innerHTML =
+      `Couldn't load data.json (${err.message}). If you're running this locally, serve the folder ` +
+      `over HTTP (e.g. <code>python3 -m http.server</code> from web/) rather than opening the file directly.`;
+  });
+
+function initApp() {
+(function renderRefreshBanner() {
+  document.getElementById('refreshBanner').innerHTML = `
+    <span class="dot"></span>
+    <span><b>Data as of ${PORTFOLIO.as_of_date}</b> &middot; refreshed automatically every day at 18:00 IST via
+    <a href="https://github.com/umasuthanpalaniappan/RiskLens/actions/workflows/daily_update.yml" target="_blank" rel="noopener">daily_update.yml</a>
+    on GitHub Actions.</span>`;
+})();
+
+(function renderHero() {
+  const stats = [
+    [PORTFOLIO.tickers.length, 'Stocks tracked'],
+    ['15 yrs', 'Training history'],
+    ['Daily', 'Automated rebalance'],
+    [GNN.n_train + GNN.n_val + GNN.n_test, 'Trading days modeled'],
+  ];
+  document.getElementById('heroStats').innerHTML = stats.map(([num, lbl]) => `
+    <div class="hero-stat"><div class="num">${num}</div><div class="lbl">${lbl}</div></div>`).join('');
+})();
+
+(function renderHeader() {
+  const style = REGIME_STYLE[PORTFOLIO.regime] || REGIME_STYLE.normal;
+  document.getElementById('regimePill').innerHTML = `
+    <span class="dot" style="background:${style.color}"></span>
+    <span><span class="label" style="display:block;color:${style.color}">${style.label}</span>
+    <span class="sub">today's regime</span></span>`;
+  const tickers = PORTFOLIO.tickers, weights = PORTFOLIO.weights, vols = PORTFOLIO.predicted_volatility;
+  const weightedVol = tickers.reduce((s, t) => s + weights[t] * vols[t], 0);
+  const topT = tickers.reduce((a, b) => weights[a] > weights[b] ? a : b);
+  const kpis = [
+    ['Holdings', tickers.length],
+    ['Weighted Avg. Predicted Vol', fmtPct(weightedVol)],
+    ['Largest Holding', `${shortTicker(topT)} (${fmtPct(weights[topT], 0)})`],
+    ['As Of', PORTFOLIO.as_of_date],
+  ];
+  document.getElementById('kpiRow').innerHTML = kpis.map(([label, value]) => `
+    <div class="kpi"><div class="label">${label}</div><div class="value">${value}</div></div>`).join('');
+  document.getElementById('lastUpdated').textContent = `Last updated: ${PORTFOLIO.timestamp} · as of ${PORTFOLIO.as_of_date}`;
+})();
+
+function seqColor(t) { if (t < 0.2) return 'var(--seq-100)'; if (t < 0.4) return 'var(--seq-250)'; if (t < 0.65) return 'var(--seq-400)'; if (t < 0.85) return 'var(--seq-550)'; return 'var(--seq-650)'; }
+function divColor(v) { const d = v - 0.5; if (Math.abs(d) < 0.02) return 'var(--div-mid)'; return d > 0 ? 'var(--div-warm)' : 'var(--div-cool)'; }
+function divColorSigned(v) { if (Math.abs(v) < 0.03) return 'var(--div-mid)'; return v > 0 ? 'var(--div-warm)' : 'var(--div-cool)'; }
+
+const ALL_SECTORS = [...new Set(PORTFOLIO.tickers.map(t => SECTOR_MAP[t] || 'Other'))].sort();
+let activeSectors = new Set(ALL_SECTORS);
+let searchQuery = '';
+function visibleTickers() {
+  return PORTFOLIO.tickers.filter(t => {
+    if (!activeSectors.has(SECTOR_MAP[t] || 'Other')) return false;
+    if (searchQuery && !t.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
+}
+function renderFilterBar() {
+  const el = document.getElementById('filterBar');
+  el.innerHTML = `
+    <span class="flabel">Sector</span>
+    ${ALL_SECTORS.map(s => `<button class="chip ${activeSectors.has(s) ? 'active' : ''}" data-sector="${s}">${s}</button>`).join('')}
+    <input class="filter-search" id="stockSearch" placeholder="Search ticker…" value="${searchQuery}" />
+    <button class="filter-reset" id="filterReset">Reset</button>
+    <span class="filter-count" id="filterCount"></span>`;
+  el.querySelectorAll('.chip').forEach(chip => chip.addEventListener('click', () => {
+    const s = chip.dataset.sector;
+    if (activeSectors.has(s)) activeSectors.delete(s); else activeSectors.add(s);
+    renderFilterBar(); refreshPortfolioTab();
+  }));
+  document.getElementById('stockSearch').addEventListener('input', (e) => { searchQuery = e.target.value; refreshPortfolioTab(); updateFilterCount(); });
+  document.getElementById('filterReset').addEventListener('click', () => { activeSectors = new Set(ALL_SECTORS); searchQuery = ''; renderFilterBar(); refreshPortfolioTab(); });
+  updateFilterCount();
+}
+function updateFilterCount() {
+  const el = document.getElementById('filterCount');
+  if (el) el.textContent = `${visibleTickers().length} of ${PORTFOLIO.tickers.length} stocks`;
+}
+
+function renderBarList(containerId, items, opts) {
+  const max = opts.max ?? Math.max(...items.map(i => i.value), 1e-9);
+  const min = opts.min ?? 0;
+  const el = document.getElementById(containerId);
+  if (!items.length) { el.innerHTML = `<div class="empty-note">No stocks match the current filters.</div>`; return; }
+  el.innerHTML = items.map(item => {
+    const frac = opts.diverging ? item.value : (item.value - min) / (max - min || 1);
+    const color = opts.diverging ? divColor(item.value) : seqColor(frac);
+    const widthPct = opts.diverging ? Math.abs(item.value - 0.5) * 2 * 100 : Math.max(2, ((item.value - min) / (max - min || 1)) * 100);
+    const left = opts.diverging && item.value < 0.5 ? (100 - widthPct) : 0;
+    return `<div class="bar-row" data-name="${item.name}" data-value="${item.value}" data-extra='${JSON.stringify(item.extra||{})}'>
+        <div class="name">${item.label}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${widthPct}%; left:${opts.diverging ? left : 0}%; background:${color}"></div></div>
+        <div class="bar-value">${opts.fmt(item.value)}</div></div>`;
+  }).join('');
+  el.querySelectorAll('.bar-row').forEach(row => {
+    row.addEventListener('mousemove', (e) => {
+      const extra = JSON.parse(row.dataset.extra || '{}');
+      let html = `<b>${row.dataset.name}</b><div class="row"><span>${opts.tooltipLabel}</span><span>${opts.fmt(parseFloat(row.dataset.value))}</span></div>`;
+      Object.entries(extra).forEach(([k, v]) => { html += `<div class="row"><span>${k}</span><span>${v}</span></div>`; });
+      showTip(e, html);
+    });
+    row.addEventListener('mouseleave', hideTip);
+  });
+}
+function buildWeightItems(tickers) {
+  return [...tickers].sort((a, b) => PORTFOLIO.weights[b] - PORTFOLIO.weights[a]).map(t => ({
+    name: t, label: shortTicker(t), value: PORTFOLIO.weights[t],
+    extra: { 'Sector': SECTOR_MAP[t] || 'Other', 'Predicted vol': fmtPct(PORTFOLIO.predicted_volatility[t]) } }));
+}
+function buildSectorItems(tickers) {
+  const sums = {};
+  tickers.forEach(t => { const s = SECTOR_MAP[t] || 'Other'; sums[s] = (sums[s] || 0) + PORTFOLIO.weights[t]; });
+  return Object.entries(sums).sort((a, b) => b[1] - a[1]).map(([s, v]) => ({ name: s, label: s, value: v, extra: {} }));
+}
+function buildAlphaItems() {
+  return [...PORTFOLIO.tickers].sort((a, b) => GNN.alpha[b] - GNN.alpha[a]).map(t => ({ name: t, label: shortTicker(t), value: GNN.alpha[t], extra: {} }));
+}
+function computeRiskContribution() {
+  const corrTickers = HIST.correlation.tickers, M = HIST.correlation.matrix;
+  const idx = {}; corrTickers.forEach((t, i) => idx[t] = i);
+  const tickers = PORTFOLIO.tickers;
+  const v = tickers.map(t => PORTFOLIO.predicted_volatility[t]);
+  const w = tickers.map(t => PORTFOLIO.weights[t]);
+  const n = tickers.length;
+  const Sigma = Array.from({ length: n }, () => Array(n).fill(0));
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    const ci = idx[tickers[i]], cj = idx[tickers[j]];
+    const corr = (ci != null && cj != null) ? M[ci][cj] : (i === j ? 1 : 0);
+    Sigma[i][j] = v[i] * v[j] * corr;
+  }
+  const SigmaW = Sigma.map(row => row.reduce((s, val, j) => s + val * w[j], 0));
+  const portVar = w.reduce((s, wi, i) => s + wi * SigmaW[i], 0);
+  const contributions = {};
+  tickers.forEach((t, i) => { contributions[t] = portVar > 0 ? (w[i] * SigmaW[i]) / portVar : 0; });
+  return contributions;
+}
+const RISK_CONTRIB = computeRiskContribution();
+function buildRiskItems(tickers) {
+  return [...tickers].sort((a, b) => RISK_CONTRIB[b] - RISK_CONTRIB[a]).map(t => ({
+    name: t, label: shortTicker(t), value: Math.max(RISK_CONTRIB[t], 0), extra: { 'Portfolio weight': fmtPct(PORTFOLIO.weights[t]) } }));
+}
+function refreshPortfolioTab() {
+  const tickers = visibleTickers();
+  renderBarList('weightBars', buildWeightItems(tickers), { fmt: (v) => fmtPct(v), tooltipLabel: 'Portfolio weight' });
+  renderBarList('riskBars', buildRiskItems(tickers), { fmt: (v) => fmtPct(v), tooltipLabel: 'Variance contribution' });
+  renderBarList('sectorBars', buildSectorItems(tickers), { fmt: (v) => fmtPct(v), tooltipLabel: 'Sector weight' });
+  renderTable(tickers);
+}
+renderFilterBar();
+renderBarList('alphaBars', buildAlphaItems(), { fmt: (v) => v.toFixed(2), tooltipLabel: 'Gate alpha', diverging: true, min: 0, max: 1 });
+
+function renderComparisonChart(svgId, series, opts) {
+  const svg = document.getElementById(svgId);
+  const W = 560, H = 220, padTop = 18, padBottom = 34, padSide = 30;
+  const n = series.length, gap = 28;
+  const barW = (W - padSide * 2 - gap * (n - 1)) / n;
+  const chartH = H - padTop - padBottom;
+  const maxV = opts.maxV ?? 1;
+  const coinFlipY = padTop + chartH * (1 - 0.5 / maxV);
+  let svgContent = `<line x1="${padSide}" y1="${coinFlipY}" x2="${W - padSide}" y2="${coinFlipY}" class="cmp-axis-line"/><text x="${W - padSide + 4}" y="${coinFlipY + 3}" class="cmp-axis-label">50%</text>`;
+  series.forEach((s, i) => {
+    const x = padSide + i * (barW + gap);
+    const barH = chartH * (s.value / maxV);
+    const y = padTop + chartH - barH;
+    svgContent += `<rect class="cmp-bar" data-label="${s.label}" data-value="${s.value}" x="${x}" y="${y}" width="${barW}" height="${Math.max(barH,1)}" rx="4" fill="${s.color}"/>
+      <text x="${x + barW/2}" y="${y - 8}" text-anchor="middle" class="cmp-value">${fmtPct(s.value)}</text>
+      <text x="${x + barW/2}" y="${H - padBottom + 18}" text-anchor="middle" class="cmp-label">${s.label}</text>`;
+  });
+  svg.innerHTML = svgContent;
+  svg.querySelectorAll('.cmp-bar').forEach(rect => {
+    rect.addEventListener('mousemove', (e) => showTip(e, `<b>${rect.dataset.label}</b><div class="row"><span>Direction accuracy</span><span>${fmtPct(parseFloat(rect.dataset.value))}</span></div>`));
+    rect.addEventListener('mouseleave', hideTip);
+  });
+}
+renderComparisonChart('accChart', [
+  { label: 'LSTM (baseline)', value: LSTM.test_direction_accuracy, color: 'var(--s1)' },
+  { label: 'LSTM + GNN (deployed)', value: GNN.test_direction_accuracy_blended, color: 'var(--s3)' },
+], { maxV: 0.85 });
+renderComparisonChart('internalsChart', [
+  { label: 'LSTM-only head', value: GNN.test_direction_accuracy_lstm_only, color: 'var(--s1)' },
+  { label: 'GNN-only head', value: GNN.test_direction_accuracy_gnn_only, color: 'var(--s2)' },
+  { label: 'Blended (deployed)', value: GNN.test_direction_accuracy_blended, color: 'var(--s3)' },
+], { maxV: 0.85 });
+document.getElementById('gnnCallout').innerHTML = `
+  <b>Honest read:</b> the graph-only head scores ${fmtPct(GNN.test_direction_accuracy_gnn_only,1)} &mdash; essentially a coin flip &mdash;
+  while the LSTM-only head alone scores ${fmtPct(GNN.test_direction_accuracy_lstm_only,1)}. The blended, deployed model lands at
+  ${fmtPct(GNN.test_direction_accuracy_blended,1)}.`;
+
+let sortKey = 'weight', sortDir = -1;
+const COLS = [
+  { key: 'stock', label: 'Stock' }, { key: 'sector', label: 'Sector' }, { key: 'price', label: 'Live Price' },
+  { key: 'vol', label: 'Predicted Vol' }, { key: 'weight', label: 'Portfolio Weight' }, { key: 'alpha', label: 'GNN Gate Alpha' },
+];
+function lastRealPrice(t) { const arr = HIST.series[t].price; return arr[arr.length - 1]; }
+function renderTable(tickers) {
+  const rows = tickers.map(t => ({ stock: shortTicker(t), sector: SECTOR_MAP[t] || 'Other', price: lastRealPrice(t),
+    vol: PORTFOLIO.predicted_volatility[t], weight: PORTFOLIO.weights[t], alpha: GNN.alpha[t] }));
+  rows.sort((a, b) => (a[sortKey] > b[sortKey] ? 1 : a[sortKey] < b[sortKey] ? -1 : 0) * sortDir);
+  const maxWeight = Math.max(...PORTFOLIO.tickers.map(t => PORTFOLIO.weights[t]));
+  const table = document.getElementById('stockTable');
+  if (!rows.length) { table.innerHTML = `<tbody><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">No stocks match the current filters.</td></tr></tbody>`; return; }
+  const thead = `<thead><tr>${COLS.map(c => `<th data-key="${c.key}" class="${sortKey === c.key ? 'sorted' : ''}">${c.label}<span class="arrow">${sortKey === c.key ? (sortDir === 1 ? '▲' : '▼') : '↕'}</span></th>`).join('')}</tr></thead>`;
+  const tbody = `<tbody>${rows.map(r => `<tr><td>${r.stock}</td><td><span class="sector-chip">${r.sector}</span></td>
+    <td class="num">₹${r.price.toFixed(2)}</td><td class="num">${fmtPct(r.vol)}</td>
+    <td class="num"><span class="mini-bar"><span style="width:${(r.weight/maxWeight)*100}%"></span></span>${fmtPct(r.weight)}</td>
+    <td class="num">${r.alpha.toFixed(2)}</td></tr>`).join('')}</tbody>`;
+  table.innerHTML = thead + tbody;
+  table.querySelectorAll('thead th').forEach(th => th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    if (sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = 1; }
+    renderTable(visibleTickers());
+  }));
+}
+refreshPortfolioTab();
+
+(function renderRecommendation() {
+  document.getElementById('recoAsOf').textContent = PORTFOLIO.as_of_date;
+  const top = [...PORTFOLIO.tickers].sort((a, b) => PORTFOLIO.weights[b] - PORTFOLIO.weights[a]).slice(0, 8);
+  document.getElementById('recoList').innerHTML = top.map(t => {
+    const w = PORTFOLIO.weights[t], vol = PORTFOLIO.predicted_volatility[t], a = GNN.alpha[t];
+    const reason = vol < 0.20 ? 'Low predicted volatility' : (a > 0.5 ? 'Graph signal favoured' : 'Stable LSTM signal');
+    return `<div class="reco-card"><div class="t">${shortTicker(t)}</div><div class="s">${SECTOR_MAP[t] || 'Other'}</div>
+      <div class="w">${fmtPct(w)}</div><div class="reason">${reason} &middot; ${fmtPct(vol)} predicted vol</div></div>`;
+  }).join('');
+  const acc = GNN.test_direction_accuracy_blended;
+  const gaugePct = Math.max(0, Math.min(1, (acc - 0.5) / 0.5));
+  const svg = document.getElementById('recoGauge');
+  const cx = 70, cy = 70, r = 56;
+  const startAngle = -220, endAngle = 40;
+  const angle = (deg) => (deg * Math.PI) / 180;
+  const arcPoint = (deg) => [cx + r * Math.cos(angle(deg)), cy + r * Math.sin(angle(deg))];
+  const [sx, sy] = arcPoint(startAngle); const [ex, ey] = arcPoint(endAngle);
+  const valueAngle = startAngle + (endAngle - startAngle) * gaugePct;
+  const [vx, vy] = arcPoint(valueAngle);
+  const largeArc = (endAngle - startAngle) > 180 ? 1 : 0;
+  svg.innerHTML = `<path d="M ${sx} ${sy} A ${r} ${r} 0 ${largeArc} 1 ${ex} ${ey}" fill="none" stroke="var(--grid)" stroke-width="12" stroke-linecap="round"/>
+    <path d="M ${sx} ${sy} A ${r} ${r} 0 ${largeArc} 1 ${vx} ${vy}" fill="none" stroke="var(--s3)" stroke-width="12" stroke-linecap="round"/>`;
+  document.getElementById('recoGaugeLabel').innerHTML = `<div class="n">${fmtPct(acc,1)}</div><div class="l">test accuracy</div>`;
+  document.getElementById('recoHonesty').innerHTML = `
+    <b>What "${fmtPct(acc,1)}" actually means:</b> on held-out real data the deployed model correctly called the
+    direction of 5-day volatility change ${fmtPct(acc,1)} of the time &mdash; a coin flip is 50%, and the plain
+    LSTM baseline alone already scores ${fmtPct(LSTM.test_direction_accuracy,1)}. Treat this as a modest, real
+    edge over chance, not a strong trading signal. It says nothing about expected <em>returns</em>.`;
+})();
+
+function renderLineChart(svgId, series, opts) {
+  const svg = document.getElementById(svgId);
+  const vb = svg.viewBox.baseVal;
+  const W = vb.width || 900, H = vb.height || 200;
+  const padL = opts.padL ?? 46, padR = 14, padT = 14, padB = 26;
+  const chartW = W - padL - padR, chartH = H - padT - padB;
+  const allVals = series.flatMap(s => s.points.map(p => p[1]).filter(v => v != null));
+  if (!allVals.length) { svg.innerHTML = ''; return; }
+  const yMin = opts.yMin ?? Math.min(...allVals);
+  const yMax = opts.yMax ?? Math.max(...allVals);
+  const n = series[0].points.length;
+  const x = i => padL + (n <= 1 ? 0 : (i / (n - 1)) * chartW);
+  const y = v => padT + chartH - ((v - yMin) / ((yMax - yMin) || 1)) * chartH;
+  let svgContent = '';
+  const gridN = 4;
+  for (let g = 0; g <= gridN; g++) {
+    const gy = padT + (chartH / gridN) * g;
+    const val = yMax - ((yMax - yMin) / gridN) * g;
+    svgContent += `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" class="lc-grid"/><text x="${padL - 6}" y="${gy + 3}" text-anchor="end" class="lc-axis-label">${opts.yFmt ? opts.yFmt(val) : val.toFixed(1)}</text>`;
+  }
+  const dateTicks = 5;
+  for (let t = 0; t < dateTicks; t++) {
+    const i = Math.round((n - 1) * (t / (dateTicks - 1)));
+    svgContent += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" class="lc-axis-label">${opts.xLabels ? opts.xLabels[i] : ''}</text>`;
+  }
+  series.forEach(s => {
+    let path = '', started = false;
+    s.points.forEach((p, i) => { if (p[1] == null) { started = false; return; } path += (started ? 'L' : 'M') + x(i) + ',' + y(p[1]) + ' '; started = true; });
+    if (s.area) { let areaPath = path + `L${x(n-1)},${padT+chartH} L${x(0)},${padT+chartH} Z`; svgContent += `<path d="${areaPath}" class="lc-area" fill="${s.color}"/>`; }
+    svgContent += `<path d="${path}" class="lc-line" stroke="${s.color}"/>`;
+  });
+  svgContent += `<rect class="lc-hitlayer" x="${padL}" y="${padT}" width="${chartW}" height="${chartH}"/>`;
+  svg.innerHTML = svgContent;
+  const hit = svg.querySelector('.lc-hitlayer');
+  hit.addEventListener('mousemove', (e) => {
+    const rect = svg.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    const px = (e.clientX - rect.left) * scaleX;
+    const frac = Math.min(1, Math.max(0, (px - padL) / chartW));
+    const i = Math.round(frac * (n - 1));
+    let html = `<b>${opts.xLabels ? opts.xLabels[i] : i}</b>`;
+    series.forEach(s => { const v = s.points[i] ? s.points[i][1] : null; if (v != null) html += `<div class="row"><span>${s.label}</span><span>${opts.yFmt ? opts.yFmt(v) : v}</span></div>`; });
+    showTip(e, html);
+  });
+  hit.addEventListener('mouseleave', hideTip);
+}
+
+let explorerRange = 'max';
+let explorerTicker = PORTFOLIO.tickers[0];
+let explorerPage = 0;
+const EXPLORER_PAGE_SIZE = 20;
+function renderExplorerPicker() {
+  const sel = document.getElementById('explorerPicker');
+  sel.innerHTML = PORTFOLIO.tickers.map(t => `<option value="${t}">${shortTicker(t)} — ${SECTOR_MAP[t] || 'Other'}</option>`).join('');
+  sel.value = explorerTicker;
+  sel.addEventListener('change', () => { explorerTicker = sel.value; explorerPage = 0; renderExplorer(); });
+}
+document.getElementById('explorerLookback').querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => {
+  document.querySelectorAll('#explorerLookback button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active'); explorerRange = btn.dataset.range; renderExplorer();
+}));
+function sliceForRange(arr) { if (explorerRange === 'max') return arr; const n = parseInt(explorerRange, 10); return arr.slice(Math.max(0, arr.length - n)); }
+function renderExplorer() {
+  const t = explorerTicker, s = HIST.series[t];
+  const lastPrice = s.price[s.price.length - 1];
+  document.getElementById('explorerStats').innerHTML = [
+    ['Sector', SECTOR_MAP[t] || 'Other'], ['Live Price', `₹${lastPrice.toFixed(2)}`],
+    ['Predicted Vol', fmtPct(PORTFOLIO.predicted_volatility[t])], ['Portfolio Weight', fmtPct(PORTFOLIO.weights[t])],
+    ['GNN Gate Alpha', GNN.alpha[t].toFixed(2)],
+  ].map(([l, v]) => `<div class="stat-tile"><div class="l">${l}</div><div class="v">${v}</div></div>`).join('');
+  const dates = sliceForRange(HIST.dates), prices = sliceForRange(s.price), vols = sliceForRange(s.realized_vol);
+  renderLineChart('explorerPriceChart', [{ label: 'Close price', color: 'var(--s1)', points: prices.map((v, i) => [i, v]), area: true }], { xLabels: dates, yFmt: v => '₹' + v.toFixed(0) });
+  renderLineChart('explorerVolChart', [{ label: 'Realised vol', color: 'var(--s2)', points: vols.map((v, i) => [i, v]) }], { xLabels: dates, yFmt: v => fmtPct(v, 0), yMin: 0 });
+  renderExplorerTable();
+}
+function renderExplorerTable() {
+  const t = explorerTicker, s = HIST.series[t], dates = HIST.dates;
+  const total = dates.length;
+  const start = Math.max(0, total - (explorerPage + 1) * EXPLORER_PAGE_SIZE);
+  const end = total - explorerPage * EXPLORER_PAGE_SIZE;
+  const rows = [];
+  for (let i = end - 1; i >= start; i--) rows.push({ date: dates[i], price: s.price[i], volume: s.volume[i], ret: s.return[i], vol: s.realized_vol[i] });
+  const table = document.getElementById('explorerTable');
+  table.innerHTML = `<thead><tr><th>Date</th><th>Close</th><th>Volume</th><th>Daily Return</th><th>Realised Vol</th></tr></thead>
+    <tbody>${rows.map(r => `<tr><td>${r.date}</td><td class="num">${r.price != null ? '₹'+r.price.toFixed(2) : '—'}</td><td class="num">${fmtNum(r.volume)}</td>
+      <td class="num">${r.ret != null ? fmtPct(r.ret, 2) : '—'}</td><td class="num">${r.vol != null ? fmtPct(r.vol) : '—'}</td></tr>`).join('')}</tbody>`;
+  const maxPage = Math.ceil(total / EXPLORER_PAGE_SIZE) - 1;
+  document.getElementById('explorerPager').innerHTML = `<button id="pgPrev" ${explorerPage >= maxPage ? 'disabled' : ''}>← Older</button><span>Page ${explorerPage + 1} of ${maxPage + 1}</span><button id="pgNext" ${explorerPage <= 0 ? 'disabled' : ''}>Newer →</button>`;
+  document.getElementById('pgPrev').addEventListener('click', () => { if (explorerPage < maxPage) { explorerPage++; renderExplorerTable(); } });
+  document.getElementById('pgNext').addEventListener('click', () => { if (explorerPage > 0) { explorerPage--; renderExplorerTable(); } });
+}
+renderExplorerPicker();
+renderExplorer();
+
+(function renderHeatmap() {
+  const svg = document.getElementById('corrHeatmap');
+  const tickers = HIST.correlation.tickers, M = HIST.correlation.matrix;
+  const n = tickers.length, pad = 90, size = 620, cell = (size - pad) / n;
+  let content = '';
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    const v = M[i][j];
+    const color = i === j ? 'var(--baseline)' : divColorSigned(v);
+    const x = pad + j * cell, y = pad + i * cell;
+    content += `<rect class="cell" data-i="${i}" data-j="${j}" data-v="${v}" x="${x}" y="${y}" width="${cell-1}" height="${cell-1}" fill="${color}"/>`;
+  }
+  for (let i = 0; i < n; i++) {
+    content += `<text x="${pad - 6}" y="${pad + i*cell + cell/2 + 3}" text-anchor="end" class="heatmap-label">${shortTicker(tickers[i])}</text>`;
+    content += `<text x="${pad + i*cell + cell/2}" y="${pad - 8}" text-anchor="start" transform="rotate(-55 ${pad + i*cell + cell/2} ${pad - 8})" class="heatmap-label">${shortTicker(tickers[i])}</text>`;
+  }
+  svg.innerHTML = content;
+  svg.querySelectorAll('.cell').forEach(c => {
+    c.addEventListener('mousemove', (e) => { const i = +c.dataset.i, j = +c.dataset.j; showTip(e, `<b>${shortTicker(tickers[i])} &times; ${shortTicker(tickers[j])}</b><div class="row"><span>Correlation</span><span>${(+c.dataset.v).toFixed(2)}</span></div>`); });
+    c.addEventListener('mouseleave', hideTip);
+  });
+})();
+
+(function renderRegime() {
+  const timeline = HIST.regime_timeline;
+  const svgRibbon = document.getElementById('regimeRibbon');
+  const W = 900, n = timeline.length, segW = W / n;
+  let content = '';
+  timeline.forEach((pt, i) => {
+    const [date, r, val] = pt;
+    const style = REGIME_STYLE[r] || REGIME_STYLE.normal;
+    content += `<rect class="ribbon-seg" data-date="${date}" data-regime="${r}" data-val="${val}" x="${i*segW}" y="10" width="${segW+0.5}" height="30" fill="${style.color}"/>`;
+  });
+  const tickN = 6;
+  for (let t = 0; t < tickN; t++) { const i = Math.round((n - 1) * (t / (tickN - 1))); content += `<text x="${i*segW}" y="55" class="lc-axis-label">${timeline[i][0]}</text>`; }
+  svgRibbon.innerHTML = content;
+  svgRibbon.querySelectorAll('.ribbon-seg').forEach(seg => {
+    seg.addEventListener('mousemove', (e) => showTip(e, `<b>${seg.dataset.date}</b><div class="row"><span>Regime</span><span>${seg.dataset.regime}</span></div><div class="row"><span>Market vol</span><span>${fmtPct(+seg.dataset.val)}</span></div>`));
+    seg.addEventListener('mouseleave', hideTip);
+  });
+  renderLineChart('regimeVolChart', [{ label: 'Market realised vol', color: 'var(--s1)', points: timeline.map((pt, i) => [i, pt[2]]), area: true }], { xLabels: timeline.map(pt => pt[0]), yFmt: v => fmtPct(v, 0), yMin: 0 });
+})();
+
+document.querySelectorAll('.tabbtn').forEach(btn => btn.addEventListener('click', () => {
+  document.querySelectorAll('.tabbtn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+}));
+
+(function themeToggle() {
+  const root = document.documentElement;
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    const current = root.getAttribute('data-theme');
+    root.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+  });
+})();
+
+} // initApp
+</script>
+</body>
+</html>

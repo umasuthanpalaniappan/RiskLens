@@ -74,6 +74,7 @@ def main() -> None:
         "gnn": load_json(root / "results" / "gnn_results.json"),
         "lstm": load_json(root / "results" / "lstm_results.json"),
         "sector_map": config.SECTOR_MAP,
+        "max_weight": config.PORTFOLIO_MAX_WEIGHT,
     }
 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)

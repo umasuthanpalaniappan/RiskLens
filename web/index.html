@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>RiskLens — Volatility-Aware Portfolio Construction</title>
 <meta name="description" content="LSTM + dynamic graph neural network volatility forecasting and minimum-variance portfolio construction for 18 NSE stocks, on real daily market data." />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="RiskLens — Volatility-Aware Portfolio Construction" />
+<meta property="og:description" content="LSTM + dynamic graph neural network volatility forecasting and minimum-variance portfolio construction for 18 NSE stocks, refreshed daily on real market data." />
+<meta property="og:image" content="https://raw.githubusercontent.com/umasuthanpalaniappan/RiskLens/main/web/og-card.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="RiskLens — Volatility-Aware Portfolio Construction" />
+<meta name="twitter:description" content="LSTM + dynamic GNN volatility forecasting and minimum-variance portfolio construction for 18 NSE stocks, on real daily market data." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%88%3C/text%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -337,7 +346,7 @@
     <div class="filter-bar" id="filterBar"></div>
     <div class="grid2">
       <section class="card"><h2>Portfolio weights</h2><p class="hint">Long-only minimum-variance allocation, sized by weight (darker = larger).</p><div class="barchart" id="weightBars"></div></section>
-      <section class="card"><h2>Risk contribution</h2><p class="hint">Share of total portfolio variance each stock contributes &mdash; via &Sigma; built from real predicted vol &times; real 60-day correlation.</p><div class="barchart" id="riskBars"></div></section>
+      <section class="card"><h2>Risk contribution</h2><p class="hint">Share of total portfolio variance each stock contributes &mdash; via &Sigma; built from real predicted vol &times; real 60-day correlation.</p><div class="barchart" id="riskBars"></div><div class="callout" id="riskCallout" style="margin-top:14px;"></div></section>
     </div>
     <section class="card"><h2>Sector allocation</h2><p class="hint">Portfolio weight summed by sector.</p><div class="barchart" id="sectorBars"></div></section>
     <section class="card">
@@ -437,7 +446,7 @@ const REGIME_STYLE = {
   crisis: { color: 'var(--critical)', label: 'CRISIS' },
 };
 
-let PORTFOLIO, GNN, LSTM, SECTOR_MAP, HIST;
+let PORTFOLIO, GNN, LSTM, SECTOR_MAP, HIST, MAX_WEIGHT;
 
 const tooltip = () => document.getElementById('tooltip');
 function showTip(evt, html) { const t = tooltip(); t.innerHTML = html; t.classList.add('show'); moveTip(evt); }
@@ -457,7 +466,7 @@ fetch('./data.json')
   .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
   .then(payload => {
     PORTFOLIO = payload.portfolio; GNN = payload.gnn; LSTM = payload.lstm;
-    SECTOR_MAP = payload.sector_map; HIST = payload.market;
+    SECTOR_MAP = payload.sector_map; HIST = payload.market; MAX_WEIGHT = payload.max_weight ?? 0.35;
     document.getElementById('loadState').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     initApp();
@@ -616,6 +625,18 @@ function buildRiskItems(tickers) {
   return [...tickers].sort((a, b) => RISK_CONTRIB[b] - RISK_CONTRIB[a]).map(t => ({
     name: t, label: shortTicker(t), value: Math.max(RISK_CONTRIB[t], 0), extra: { 'Portfolio weight': fmtPct(PORTFOLIO.weights[t]) } }));
 }
+(function renderRiskCallout() {
+  const capEps = 0.001;
+  const capped = PORTFOLIO.tickers.filter(t => PORTFOLIO.weights[t] >= MAX_WEIGHT - capEps);
+  const note = capped.length
+    ? `<b>${capped.map(shortTicker).join(', ')}</b> ${capped.length > 1 ? 'are' : 'is'} pinned at the ${fmtPct(MAX_WEIGHT, 0)} per-name cap &mdash; that's the one place weight and risk contribution diverge, since the optimiser would put more there if it could.`
+    : `no stock is currently pinned at the ${fmtPct(MAX_WEIGHT, 0)} per-name cap.`;
+  document.getElementById('riskCallout').innerHTML =
+    `<b>Why these two charts look almost identical:</b> this is a textbook property of an unconstrained minimum-variance
+    solve, not a duplicate chart. At the optimum, every held stock has equal marginal contribution to portfolio
+    variance per rupee invested &mdash; which forces each stock's share of total <em>risk</em> to equal its share of
+    total <em>weight</em>. Today, ${note}`;
+})();
 function refreshPortfolioTab() {
   const tickers = visibleTickers();
   renderBarList('weightBars', buildWeightItems(tickers), { fmt: (v) => fmtPct(v), tooltipLabel: 'Portfolio weight' });

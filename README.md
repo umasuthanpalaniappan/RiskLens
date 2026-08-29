@@ -1,44 +1,58 @@
 # RiskLens
 
-Stock volatility forecasting with an LSTM baseline and a dynamic graph
-neural network (GNN), feeding a daily minimum-variance portfolio and a
-Streamlit dashboard.
+**LSTM + dynamic Graph Neural Network volatility forecasting, feeding a real, daily-rebalanced minimum-variance portfolio.**
+
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-risk--lens-2a78d6?style=for-the-badge)](https://risk-lens-orcin.vercel.app)
+[![Daily Automation](https://img.shields.io/github/actions/workflow/status/umasuthanpalaniappan/RiskLens/daily_update.yml?label=daily%20automation&style=for-the-badge)](https://github.com/umasuthanpalaniappan/RiskLens/actions/workflows/daily_update.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+
+**[🔴 Live Dashboard →](https://risk-lens-orcin.vercel.app)** — real NSE data, real models, real portfolio, redeployed automatically every day. No login, no setup, just open it.
+
+<img src="docs/screenshots/hero.png" alt="RiskLens dashboard hero section" width="100%">
+
+---
 
 ## What it does
 
-1. **Forecast volatility.** For each stock in the universe, predict a
-   *volatility ratio* — realised volatility over the next `HORIZON` trading
-   days, relative to trailing realised volatility. Two models are trained
-   and compared:
-   - `LSTMVolModel` — a single-stock LSTM. Each stock is scored from its own
-     return/volatility history only.
-   - `GNNVolModel` — the same LSTM encoder, refined by a graph convolution
-     over a **dynamic graph** that is re-estimated on a rolling 60-day
-     window (so the graph structure itself evolves over time). Edges come
-     from cross-stock **realised-volatility correlation**, not return
-     correlation -- vol clustering/contagion is the structure that's
-     actually relevant to a model predicting where volatility goes next,
-     whereas return correlation mostly captures a different thing (shared
-     market/sector beta). A learnable per-stock gate (`alpha`, in [0, 1])
-     blends the graph-refined prediction with the plain LSTM prediction, so
-     the model can fall back to the univariate signal for stocks the graph
-     doesn't help.
-2. **Build a portfolio.** Turn today's predicted volatilities into a
-   long-only **minimum-variance** portfolio (see below for why not full
-   Markowitz).
-3. **Classify the regime.** Bucket today's market-wide volatility into
-   calm / normal / crisis based on trailing quantiles.
-4. **Show it.** Two dashboards read the same JSON results: `app/dashboard.py`
-   is a local Streamlit app for development, and `web/index.html` is a
-   static site (deployed on Vercel) that is the superset of it — every
-   Streamlit tab's content (portfolio weights, sector allocation, stock
-   detail, model-comparison charts, correlation heatmap, historical trends)
-   plus a Recommendation tab and a full per-stock Stock Explorer, all fed by
-   `web/data.json`, which the CI workflows regenerate and commit on every
-   real data refresh so Vercel's Git integration redeploys automatically.
-5. **Automate it.** A daily GitHub Actions workflow re-runs the live
-   portfolio step after the NSE market closes and commits any changed
-   results.
+For 18 large/mid-cap NSE stocks, RiskLens:
+
+1. **Forecasts volatility** — not returns. Two models, trained and compared head-to-head:
+   - **LSTM baseline** — a single-stock model scored from each stock's own return/volatility history.
+   - **Dynamic GNN** — the same LSTM encoder, refined by a graph convolution over a graph that's *re-estimated on a rolling 60-day window*, so the graph structure itself evolves over time. Edges come from cross-stock **volatility correlation** (not price correlation) — vol clustering is what's actually relevant to forecasting where volatility goes next. A learnable per-stock gate blends the graph-refined signal with the plain LSTM signal.
+2. **Builds a portfolio** — turns today's predicted volatilities into a long-only **minimum-variance** allocation (deliberately not Markowitz — see [why](#why-minimum-variance-not-markowitz)).
+3. **Classifies the market regime** — calm / normal / crisis, from trailing volatility quantiles.
+4. **Runs itself** — a GitHub Actions workflow re-runs inference every trading day after NSE close and pushes updated results, which auto-redeploys the live dashboard via Vercel's Git integration. Nobody has to touch this for it to stay current.
+
+## Screenshots
+
+| Live dashboard | Dynamic correlation network |
+|---|---|
+| <img src="docs/screenshots/portfolio.png" width="100%"> | <img src="docs/screenshots/network-graph.png" width="100%"> |
+
+The network graph (Market Overview tab) isn't decorative — it's a force-directed visualization of the *actual graph* the GNN convolves over: real 60-day volatility correlations, nodes sized by real portfolio weight. Hover to trace a stock's neighbourhood; click to jump straight to it.
+
+## Current results
+
+| Model | Test direction accuracy | Test MSE |
+|---|---|---|
+| LSTM baseline | 71.9% | 1.04 |
+| GNN — graph-only head | 47.0% (~coin flip) | 1.45 |
+| **GNN — blended (deployed)** | **72.1%** | **0.85** |
+
+*(Direction accuracy = correctly calling whether 5-day-ahead realised volatility rises or falls, on a held-out chronological test split of real NSE data. See the [live Model Performance tab](https://risk-lens-orcin.vercel.app/#dashboard) for current numbers — this table updates when the model is retrained; it isn't guaranteed to match what you see live.)*
+
+We report the graph-only number deliberately: it's close to chance on its own. The value RiskLens gets from the GNN is a small, honest lift on top of the LSTM, not a graph doing the heavy lifting by itself. **This is a research/educational project — not financial advice.**
+
+## Table of contents
+
+- [Why minimum-variance, not Markowitz](#why-minimum-variance-not-markowitz)
+- [Architecture](#architecture)
+- [Data](#data)
+- [Setup](#setup)
+- [Running the pipeline](#running-the-pipeline)
+- [Daily automation](#daily-automation)
+- [Dashboards](#dashboards)
+- [Regime classification](#regime-classification)
 
 ## Why minimum-variance, not Markowitz
 
@@ -63,7 +77,7 @@ not a second forecasting model.
 src/
   config.py     # single source of truth: universe, paths, hyperparameters
   data.py       # yfinance download + local CSV cache (data/raw/prices.csv)
-  features.py   # log returns, realised vol, forward vol-ratio target
+  features.py   # log returns, realised vol, momentum, volume z-score, RSI, MACD
   graph.py      # rolling correlation adjacency, graph Laplacian
   dataset.py    # windowing, chronological train/val/test split, norm stats
   models.py     # LSTMVolModel, GNNVolModel (+ GraphConvLayer, gate alpha)
@@ -80,12 +94,19 @@ scripts/
                      # latest prices, predicts vol, builds Sigma + the graph Laplacian
                      # from the most recent 60-day window, classifies the regime, solves
                      # the portfolio, writes results/portfolio_weights.json
+  export_dashboard_data.py  # aggregates results + full market history into web/data.json
 
 app/
-  dashboard.py  # Streamlit dashboard reading the three results JSON files
+  dashboard.py  # local Streamlit dashboard (dev tool)
+
+web/
+  index.html    # the live dashboard — static site, deployed on Vercel
+  data.json     # generated by export_dashboard_data.py, committed on every refresh
 
 .github/workflows/
-  daily_update.yml  # cron @ 12:30 UTC (18:00 IST) -> run_portfolio.py -> commit results/
+  daily_update.yml       # cron @ 12:30 UTC (18:00 IST) -> live inference -> commit results/
+  train_models.yml       # manual: full LSTM+GNN retrain -> commit models/ + dataset/
+  export_dashboard_data.yml  # manual: regenerate web/data.json only
 ```
 
 Nothing is duplicated between scripts: all data prep, normalisation, model
@@ -133,6 +154,12 @@ naming the ticker rather than failing downstream with a cryptic empty-data
 crash. Fix it by swapping the symbol in `config.TICKERS`/`config.SECTOR_MAP`
 and retraining.
 
+**All models, results, and the dataset currently committed to this repo were
+trained end-to-end on real, live NSE market data** pulled by GitHub Actions
+runners (which have real internet access) — not synthetic data. Every
+retrain is a real `train_models.yml` run you can inspect in the
+[Actions tab](https://github.com/umasuthanpalaniappan/RiskLens/actions).
+
 ## Setup
 
 ```bash
@@ -147,69 +174,54 @@ pip install -r requirements.txt
 python scripts/run_lstm.py        # trains the LSTM baseline
 python scripts/run_gnn.py         # trains the GNN, saves norm_stats.json
 python scripts/run_portfolio.py   # live daily inference -> portfolio_weights.json
-streamlit run app/dashboard.py    # view the dashboard
+python scripts/export_dashboard_data.py  # -> web/data.json
+streamlit run app/dashboard.py    # or: python3 -m http.server, from web/
 ```
 
 Run them in that order the first time — `run_portfolio.py` needs the GNN
-weights and normalisation stats that `run_gnn.py` produces, and the
-dashboard needs all three results files to exist.
-
-> **Note on this repository's committed model weights.** The
-> `models/*.pt` and `results/*.json` currently checked in were produced end
-> to end, but with a *synthetic* price series rather than live NSE data —
-> the sandbox this project was assembled in has outbound network access to
-> Yahoo Finance blocked by policy, so live data could not be pulled from
-> there. The full pipeline (data → features → graph → training → portfolio
-> → dashboard) was verified to run cleanly with that synthetic data. Before
-> trusting the numbers for anything real, re-run `run_lstm.py` and
-> `run_gnn.py` locally (or let a manual Actions run do it) so the models are
-> trained on real market history — `data/raw/` is gitignored precisely so
-> the first real run pulls fresh data rather than reusing a stale cache.
+weights and normalisation stats that `run_gnn.py` produces, and both
+dashboards need `results/*.json` to exist.
 
 ## Daily automation
 
 `.github/workflows/daily_update.yml` runs on a cron of `30 12 * * *` (UTC),
 i.e. 18:00 IST, after the NSE market close. It installs
 `requirements.txt`, runs `scripts/run_portfolio.py` (inference only — it
-does not retrain the models), and commits `results/` back to the repo as
-the `github-actions[bot]` identity, but only if something actually
-changed. It does not retrain `models/*.pt`; retraining is a separate,
-manual step (`run_lstm.py` / `run_gnn.py`) since it's compute-heavier and
-the universe/graph structure doesn't need to be re-learned every day.
+does not retrain the models) and `scripts/export_dashboard_data.py`, and
+commits `results/` + `web/data.json` back to the repo as the
+`github-actions[bot]` identity, but only if something actually changed. It
+does not retrain `models/*.pt`; retraining is a separate, manual step
+(`run_lstm.py` / `run_gnn.py`) since it's compute-heavier and the
+universe/graph structure doesn't need to be re-learned every day.
 
 `.github/workflows/train_models.yml` is that manual retraining step, run as
-a GitHub Actions job (`workflow_dispatch` only — no schedule) rather than
-locally, since GitHub's runners have real internet access that some
-development environments don't. It installs `requirements.txt`, runs
-`scripts/run_lstm.py` then `scripts/run_gnn.py`, and commits
-`models/*.pt` + `results/{lstm,gnn}_results.json` + `results/norm_stats.json`
-as `github-actions[bot]`, only if anything changed. Trigger it from the
-Actions tab whenever you want the models retrained on the latest history
-(e.g. after adding tickers, changing features/hyperparameters, or simply to
-refresh on more recent data).
+a GitHub Actions job (`workflow_dispatch` only — no schedule). It installs
+`requirements.txt`, runs `scripts/run_lstm.py` then `scripts/run_gnn.py`,
+snapshots the training data to `dataset/`, and commits `models/*.pt` +
+`results/*.json` + `dataset/` + `web/data.json` as `github-actions[bot]`,
+only if anything changed. Trigger it from the Actions tab whenever you want
+the models retrained on the latest history.
 
-## Dashboard
+Because `web/data.json` is committed on both workflows, and Vercel's Git
+integration is connected to this repo, **every real data refresh triggers a
+real redeploy** of the live dashboard — no client-side polling, no stale
+snapshots.
 
-`app/dashboard.py` is a single-file Streamlit app with no browser storage —
-every reload re-reads the on-disk results. It has three tabs:
+## Dashboards
 
-- **Portfolio** — RiskLens title with a calm/normal/crisis regime badge, KPI
-  tiles, portfolio weights (bar or pie, colour-coded by sector), a sector
-  allocation chart, and a per-stock table (predicted volatility, portfolio
-  weight, GNN gate alpha).
-- **Model Performance** — LSTM vs. LSTM+GNN direction-accuracy comparison,
-  a breakdown of the GNN's internal LSTM-only/GNN-only/blended heads, and
-  the per-stock gate alpha.
-- **Market Overview** — a correlation heatmap of the same rolling window
-  the GNN's graph and the portfolio's Sigma are built from, a price-history
-  and realised-vol trend chart per stock with a selectable lookback (1Y /
-  3Y / 5Y / 10Y / Max, up to the full ~15-year cache), and a sortable
-  universe snapshot table (last close + trailing vol for every stock, by
-  sector). This tab reads the local `data/raw/` price/volume cache in
-  addition to the three results JSONs, and degrades to a friendly message
-  if that cache isn't present yet.
+Two dashboards read the same result JSONs:
 
-A last-updated timestamp is shown at the bottom of every tab.
+- **[`web/index.html`](web/index.html)** — the one deployed live on Vercel.
+  A static site (no framework, no build step) that fetches `web/data.json`
+  at load time. Sections: Methodology, Portfolio (filterable, sortable,
+  sector allocation, risk contribution), Recommendation (with an honest
+  reliability readout), Model Performance, a full per-stock Stock Explorer
+  (price/volume/volatility history, 1Y–Max lookback), and Market Overview
+  (the correlation network graph, a correlation heatmap, and regime
+  history). Responsive, light/dark themed with persisted preference, and
+  built with the same real ~15-year data as everything else.
+- **[`app/dashboard.py`](app/dashboard.py)** — a local Streamlit app for
+  development; covers the same core data without the extra sections above.
 
 ## Regime classification
 
@@ -218,3 +230,7 @@ realised volatility across the universe and buckets the latest value
 against its own trailing-3-year quantiles: below the 33rd percentile is
 "calm", above the 85th is "crisis", otherwise "normal". It's intentionally
 simple and auditable rather than a latent-state model.
+
+---
+
+<sub>Built for 23MAT204 (Mathematics for Intelligent Systems 3). Not financial advice — RiskLens forecasts volatility, not returns, and makes no claim about expected performance. See [LICENSE](LICENSE).</sub>

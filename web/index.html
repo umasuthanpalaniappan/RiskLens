@@ -241,6 +241,15 @@
   .heatmap-label { font-size: 9px; fill: var(--ink-2); }
   .ribbon-seg { cursor: pointer; }
 
+  .net-wrap { width: 100%; border-radius: 12px; background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--s1) 6%, var(--surface)), var(--surface) 70%); border: 1px solid var(--border); overflow: hidden; }
+  svg.netgraph { width: 100%; height: auto; display: block; }
+  .net-edge { transition: opacity 0.18s ease, stroke-width 0.18s ease; }
+  .net-node-halo { fill: none; opacity: 0; transition: opacity 0.18s ease; }
+  .net-node circle.body { cursor: pointer; transition: filter 0.18s ease, transform 0.18s ease; transform-box: fill-box; transform-origin: center; }
+  .net-node:hover circle.body { transform: scale(1.15); filter: drop-shadow(0 0 6px color-mix(in srgb, var(--s1) 60%, transparent)); }
+  .net-label { font-size: 9.5px; font-weight: 700; fill: var(--ink); pointer-events: none; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+  .net-dimmed { opacity: 0.12; }
+
   .stat-tile-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px; }
   @media (max-width: 900px) { .stat-tile-row { grid-template-columns: repeat(2, 1fr); } }
   .stat-tile { background: var(--page); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
@@ -479,6 +488,12 @@
   </div>
 
   <div class="panel" id="panel-market">
+    <section class="card">
+      <h2>Dynamic correlation network</h2>
+      <p class="hint">This is the actual graph structure the GNN convolves over &mdash; nodes are stocks (sized by portfolio weight, coloured by sector), edges are the strongest real 60-day volatility correlations. Hover a node to trace its neighbourhood; click to jump to it in the Stock Explorer.</p>
+      <div class="net-wrap"><svg class="netgraph" id="networkGraph" viewBox="0 0 800 540"></svg></div>
+      <div class="legend" id="networkLegend"></div>
+    </section>
     <section class="card"><h2>Correlation structure (most recent 60-day window)</h2><p class="hint">The same rolling correlation window portfolio.py uses to build &Sigma;. Diverging: blue = negative, red = positive.</p><svg class="heatmap" id="corrHeatmap" viewBox="0 0 620 620"></svg></section>
     <section class="card">
       <h2>Regime history</h2>
@@ -963,6 +978,126 @@ function renderExplorerTable() {
 }
 renderExplorerPicker();
 renderExplorer();
+
+const SECTOR_PALETTE = ['var(--s1)', 'var(--s2)', 'var(--s3)', '#af52de', '#c9a227', '#ff6b9d', '#5ac8c8', '#8b6f47', '#6b7280', '#3b82f6'];
+const sectorColor = (() => {
+  const map = {}; ALL_SECTORS.forEach((s, i) => { map[s] = SECTOR_PALETTE[i % SECTOR_PALETTE.length]; });
+  return (s) => map[s] || 'var(--muted)';
+})();
+
+(function renderNetworkGraph() {
+  const svg = document.getElementById('networkGraph');
+  const tickers = HIST.correlation.tickers, M = HIST.correlation.matrix;
+  const idx = {}; tickers.forEach((t, i) => idx[t] = i);
+  const n = tickers.length;
+  const W = 800, H = 540, cx = W / 2, cy = H / 2;
+
+  // Deterministic seeded RNG so the layout is stable across reloads.
+  let seed = 42;
+  function rand() { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }
+
+  // Build a sparse edge list: keep an edge if |corr| clears a threshold, or it's
+  // among a node's strongest few links -- avoids an unreadable 150+ edge tangle.
+  const K = 3, THRESH = 0.35;
+  const edgeSet = new Map();
+  function addEdge(i, j, w) { const key = i < j ? i + '-' + j : j + '-' + i; if (!edgeSet.has(key) || Math.abs(edgeSet.get(key)) < Math.abs(w)) edgeSet.set(key, w); }
+  tickers.forEach((t, i) => {
+    const neighbours = tickers.map((_, j) => j).filter(j => j !== i).sort((a, b) => Math.abs(M[i][b]) - Math.abs(M[i][a]));
+    neighbours.slice(0, K).forEach(j => addEdge(i, j, M[i][j]));
+    neighbours.forEach(j => { if (Math.abs(M[i][j]) >= THRESH) addEdge(i, j, M[i][j]); });
+  });
+  const edges = [...edgeSet.entries()].map(([key, w]) => { const [a, b] = key.split('-').map(Number); return { a, b, w }; });
+
+  const maxW = Math.max(...tickers.map(t => PORTFOLIO.weights[t] || 0), 1e-9);
+  const nodes = tickers.map((t, i) => {
+    const angle = (i / n) * Math.PI * 2, r = 160 + rand() * 40;
+    return {
+      t, i, x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r, vx: 0, vy: 0,
+      radius: 9 + Math.sqrt((PORTFOLIO.weights[t] || 0) / maxW) * 16,
+      sector: SECTOR_MAP[t] || 'Other',
+    };
+  });
+
+  const degree = {}; edges.forEach(e => { degree[e.a] = (degree[e.a] || 0) + 1; degree[e.b] = (degree[e.b] || 0) + 1; });
+
+  for (let step = 0; step < 400; step++) {
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        let dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y;
+        let dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+        const minDist = nodes[i].radius + nodes[j].radius + 26;
+        const force = (dist < minDist ? 900 : 2600) / (dist * dist);
+        const fx = (dx / dist) * force, fy = (dy / dist) * force;
+        nodes[i].vx += fx; nodes[i].vy += fy; nodes[j].vx -= fx; nodes[j].vy -= fy;
+      }
+    }
+    edges.forEach(e => {
+      const A = nodes[e.a], B = nodes[e.b];
+      let dx = B.x - A.x, dy = B.y - A.y;
+      let dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+      const ideal = 60 + (1 - Math.abs(e.w)) * 220;
+      const force = (dist - ideal) * 0.02;
+      const fx = (dx / dist) * force, fy = (dy / dist) * force;
+      A.vx += fx; A.vy += fy; B.vx -= fx; B.vy -= fy;
+    });
+    nodes.forEach(nd => {
+      nd.vx += (cx - nd.x) * 0.006; nd.vy += (cy - nd.y) * 0.006;
+      nd.vx *= 0.82; nd.vy *= 0.82;
+      nd.x += nd.vx; nd.y += nd.vy;
+      nd.x = Math.max(nd.radius + 14, Math.min(W - nd.radius - 14, nd.x));
+      nd.y = Math.max(nd.radius + 14, Math.min(H - nd.radius - 14, nd.y));
+    });
+  }
+
+  const edgeLines = edges.map(e => {
+    const A = nodes[e.a], B = nodes[e.b];
+    const color = e.w >= 0 ? 'var(--div-warm)' : 'var(--div-cool)';
+    return `<line class="net-edge" data-a="${e.a}" data-b="${e.b}" x1="${A.x.toFixed(1)}" y1="${A.y.toFixed(1)}" x2="${B.x.toFixed(1)}" y2="${B.y.toFixed(1)}" stroke="${color}" stroke-width="${(1 + Math.abs(e.w) * 3.5).toFixed(2)}" opacity="${(0.2 + Math.abs(e.w) * 0.55).toFixed(2)}"/>`;
+  }).join('');
+
+  const nodeGroups = nodes.map(nd => `
+    <g class="net-node" data-i="${nd.i}" transform="translate(${nd.x.toFixed(1)},${nd.y.toFixed(1)})">
+      <circle class="net-node-halo" data-i="${nd.i}" r="${nd.radius + 7}" stroke="${sectorColor(nd.sector)}" stroke-width="2"/>
+      <circle class="body" r="${nd.radius.toFixed(1)}" fill="${sectorColor(nd.sector)}" stroke="var(--surface)" stroke-width="2"/>
+      <text class="net-label" y="${nd.radius + 12}" text-anchor="middle">${shortTicker(nd.t)}</text>
+    </g>`).join('');
+
+  svg.innerHTML = `<g id="netEdges">${edgeLines}</g><g id="netNodes">${nodeGroups}</g>`;
+
+  const nodeEls = svg.querySelectorAll('.net-node');
+  const edgeEls = svg.querySelectorAll('.net-edge');
+  function clearFocus() {
+    nodeEls.forEach(el => el.classList.remove('net-dimmed'));
+    edgeEls.forEach(el => el.classList.remove('net-dimmed'));
+    svg.querySelectorAll('.net-node-halo').forEach(h => h.style.opacity = 0);
+  }
+  nodeEls.forEach(g => {
+    const i = +g.dataset.i;
+    g.addEventListener('mouseenter', (e) => {
+      const connected = new Set([i]);
+      edgeEls.forEach(el => { const a = +el.dataset.a, b = +el.dataset.b; if (a === i || b === i) { connected.add(a); connected.add(b); } });
+      nodeEls.forEach(el => el.classList.toggle('net-dimmed', !connected.has(+el.dataset.i)));
+      edgeEls.forEach(el => el.classList.toggle('net-dimmed', +el.dataset.a !== i && +el.dataset.b !== i));
+      g.querySelector('.net-node-halo').style.opacity = 1;
+      const t = nodes[i].t;
+      showTip(e, `<b>${shortTicker(t)}</b> &middot; ${nodes[i].sector}<div class="row"><span>Portfolio weight</span><span>${fmtPct(PORTFOLIO.weights[t])}</span></div><div class="row"><span>Predicted vol</span><span>${fmtPct(PORTFOLIO.predicted_volatility[t])}</span></div><div class="row"><span>Graph connections</span><span>${degree[i] || 0}</span></div><div class="row" style="opacity:0.7;font-size:11px;"><span>Click to explore &rarr;</span></div>`);
+    });
+    g.addEventListener('mousemove', (e) => moveTip(e));
+    g.addEventListener('mouseleave', () => { clearFocus(); hideTip(); });
+    g.addEventListener('click', () => {
+      document.querySelector('.tabbtn[data-tab="explorer"]').click();
+      explorerTicker = nodes[i].t; explorerPage = 0;
+      document.getElementById('explorerPicker').value = explorerTicker;
+      renderExplorer();
+      document.getElementById('panel-explorer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+
+  document.getElementById('networkLegend').innerHTML =
+    ALL_SECTORS.map(s => `<span class="item"><span class="swatch" style="background:${sectorColor(s)}"></span>${s}</span>`).join('') +
+    `<span class="item"><span class="swatch" style="background:var(--div-warm)"></span>Positive corr.</span>` +
+    `<span class="item"><span class="swatch" style="background:var(--div-cool)"></span>Negative corr.</span>`;
+})();
 
 (function renderHeatmap() {
   const svg = document.getElementById('corrHeatmap');

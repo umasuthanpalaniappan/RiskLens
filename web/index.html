@@ -262,8 +262,50 @@
   .stack-pills { display: flex; gap: 8px; flex-wrap: wrap; }
   .stack-pill { font-size: 11.5px; font-weight: 600; padding: 5px 11px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); color: var(--ink-2); }
   .foot-meta { color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-top: 16px; border-top: 1px solid var(--grid); }
-  .theme-toggle { appearance: none; border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); font: inherit; font-size: 12px; padding: 5px 10px; border-radius: 8px; cursor: pointer; }
-  #loadState { padding: 80px 20px; text-align: center; color: var(--muted); font-size: 14px; }
+  .theme-toggle { appearance: none; border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); font: inherit; font-size: 12px; padding: 5px 10px; border-radius: 8px; cursor: pointer; transition: transform 0.15s ease, background 0.15s ease; }
+  .theme-toggle:hover { background: var(--page); transform: translateY(-1px); }
+
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  ::selection { background: var(--s1); color: #fff; }
+  *:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; border-radius: 4px; }
+  ::-webkit-scrollbar { width: 11px; height: 11px; }
+  ::-webkit-scrollbar-track { background: var(--page); }
+  ::-webkit-scrollbar-thumb { background: var(--baseline); border-radius: 8px; border: 3px solid var(--page); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+  html { scrollbar-color: var(--baseline) var(--page); }
+
+  .navlinks a { position: relative; transition: color 0.15s ease, background 0.15s ease; }
+  .navlinks a.active:not(.cta) { color: var(--ink); }
+  .navlinks a.active:not(.cta)::after { content: ''; position: absolute; left: 12px; right: 12px; bottom: 1px; height: 2px; border-radius: 2px; background: var(--s1); }
+
+  .reveal { opacity: 0; transform: translateY(16px); transition: opacity 0.6s cubic-bezier(0.2,0.7,0.2,1), transform 0.6s cubic-bezier(0.2,0.7,0.2,1); }
+  .reveal.in { opacity: 1; transform: translateY(0); }
+  @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } }
+
+  section.card, .pipe-step, .rationale .box, .reco-card, .kpi, .stat-tile { transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease; }
+  section.card:hover, .reco-card:hover, .kpi:hover, .stat-tile:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(11,11,11,0.06), 0 14px 28px -14px rgba(11,11,11,0.22); border-color: color-mix(in srgb, var(--s1) 25%, var(--border)); }
+  .pipe-step { position: relative; }
+  .pipe-step:hover { background: var(--page); }
+  .chip, .chart-toggle button, .pager button, button[data-range] { transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease; }
+  .chip:hover, .chart-toggle button:hover, .pager button:not(:disabled):hover, button[data-range]:hover { transform: translateY(-1px); border-color: var(--s1); }
+  .tabbtn { transition: color 0.15s ease, border-color 0.2s ease; }
+  table.data tbody tr { transition: background 0.1s ease; }
+
+  #backToTop { position: fixed; right: 20px; bottom: 20px; z-index: 45; width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--ink); box-shadow: var(--shadow); cursor: pointer; font-size: 16px; opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity 0.2s ease, transform 0.2s ease, background 0.15s ease; }
+  #backToTop.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
+  #backToTop:hover { background: var(--page); }
+
+  #loadState { min-height: 60vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 40px 20px; text-align: center; color: var(--muted); font-size: 14px; }
+  .load-spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--grid); border-top-color: var(--s1); animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .load-skeleton { width: min(720px, 100%); display: grid; gap: 10px; }
+  .sk-bar { height: 14px; border-radius: 7px; background: linear-gradient(90deg, var(--grid) 25%, var(--baseline) 50%, var(--grid) 75%); background-size: 200% 100%; animation: shimmer 1.4s ease-in-out infinite; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  #loadState.errored .load-spinner, #loadState.errored .load-skeleton { display: none; }
+  #loadRetry { display: none; appearance: none; border: none; background: var(--s1); color: #fff; font: inherit; font-size: 13px; font-weight: 700; padding: 9px 18px; border-radius: 999px; cursor: pointer; }
+  #loadState.errored #loadRetry { display: inline-block; }
+  @media (prefers-reduced-motion: reduce) { .load-spinner, .sk-bar { animation: none; } }
 </style>
 </head>
 <body>
@@ -279,9 +321,20 @@
 </div></nav>
 <div class="ticker-strip"><div class="ticker-track" id="tickerTrack"></div></div>
 
-<div id="loadState">Loading real market data…</div>
+<div id="loadState">
+  <div class="load-spinner"></div>
+  <div class="load-skeleton">
+    <div class="sk-bar" style="width:60%;height:22px;margin:0 auto 6px;"></div>
+    <div class="sk-bar" style="width:85%;"></div>
+    <div class="sk-bar" style="width:70%;"></div>
+    <div class="sk-bar" style="width:45%;"></div>
+  </div>
+  <div id="loadMsg">Loading real market data…</div>
+  <button id="loadRetry">Retry</button>
+</div>
 <div id="app" style="display:none;">
 <div id="tooltip"></div>
+<button id="backToTop" title="Back to top" aria-label="Back to top">↑</button>
 
 <section class="hero">
   <div class="hero-inner">
@@ -304,16 +357,16 @@
       <p>Six stages, each doing one job. Nothing here is a black box &mdash; every arrow below is a real function in the codebase.</p>
     </div>
     <div class="pipeline">
-      <div class="pipe-step"><span class="n">01</span><h3>Data</h3><p>Daily close &amp; volume for 18 NSE large/mid-caps, pulled live via <code>yfinance</code>, spanning ~15 years.</p></div>
-      <div class="pipe-step"><span class="n">02</span><h3>Features</h3><p>Log returns, realised volatility, 20-day momentum, a volume z-score, RSI(14) and a MACD histogram &mdash; computed per stock, per day.</p></div>
-      <div class="pipe-step"><span class="n">03</span><h3>Graph</h3><p>A rolling 60-day <em>volatility-correlation</em> graph links stocks whose risk moves together &mdash; not just their prices.</p></div>
-      <div class="pipe-step"><span class="n">04</span><h3>LSTM</h3><p>A single-stock LSTM forecasts each stock's volatility ratio from its own history alone &mdash; the baseline.</p></div>
-      <div class="pipe-step"><span class="n">05</span><h3>Dynamic GNN</h3><p>A graph convolution refines that forecast using neighbours in the graph. A learned per-stock gate decides how much to trust it.</p></div>
-      <div class="pipe-step"><span class="n">06</span><h3>Portfolio</h3><p>Predicted volatilities + real correlations build &Sigma;. A long-only optimiser solves for minimum variance.</p></div>
+      <div class="pipe-step reveal" style="transition-delay:0.02s"><span class="n">01</span><h3>Data</h3><p>Daily close &amp; volume for 18 NSE large/mid-caps, pulled live via <code>yfinance</code>, spanning ~15 years.</p></div>
+      <div class="pipe-step reveal" style="transition-delay:0.07s"><span class="n">02</span><h3>Features</h3><p>Log returns, realised volatility, 20-day momentum, a volume z-score, RSI(14) and a MACD histogram &mdash; computed per stock, per day.</p></div>
+      <div class="pipe-step reveal" style="transition-delay:0.12s"><span class="n">03</span><h3>Graph</h3><p>A rolling 60-day <em>volatility-correlation</em> graph links stocks whose risk moves together &mdash; not just their prices.</p></div>
+      <div class="pipe-step reveal" style="transition-delay:0.17s"><span class="n">04</span><h3>LSTM</h3><p>A single-stock LSTM forecasts each stock's volatility ratio from its own history alone &mdash; the baseline.</p></div>
+      <div class="pipe-step reveal" style="transition-delay:0.22s"><span class="n">05</span><h3>Dynamic GNN</h3><p>A graph convolution refines that forecast using neighbours in the graph. A learned per-stock gate decides how much to trust it.</p></div>
+      <div class="pipe-step reveal" style="transition-delay:0.27s"><span class="n">06</span><h3>Portfolio</h3><p>Predicted volatilities + real correlations build &Sigma;. A long-only optimiser solves for minimum variance.</p></div>
     </div>
     <div class="rationale">
-      <div class="box"><h3>Why volatility, not returns?</h3><p>Forecasting <em>returns</em> reliably is a much harder, noisier problem than forecasting <em>volatility</em>, which is well known to cluster and be comparatively predictable. RiskLens is honest about only tackling the tractable half of that problem.</p></div>
-      <div class="box"><h3>Why minimum-variance, not Markowitz?</h3><p>Classic mean-variance optimisation needs a return forecast too. Since these models predict volatility only, fabricating a return forecast just to run a "real" Markowitz optimiser would mean optimising against a made-up number. Minimum-variance is the honest optimisation for what's actually being forecast.</p></div>
+      <div class="box reveal"><h3>Why volatility, not returns?</h3><p>Forecasting <em>returns</em> reliably is a much harder, noisier problem than forecasting <em>volatility</em>, which is well known to cluster and be comparatively predictable. RiskLens is honest about only tackling the tractable half of that problem.</p></div>
+      <div class="box reveal" style="transition-delay:0.08s"><h3>Why minimum-variance, not Markowitz?</h3><p>Classic mean-variance optimisation needs a return forecast too. Since these models predict volatility only, fabricating a return forecast just to run a "real" Markowitz optimiser would mean optimising against a made-up number. Minimum-variance is the honest optimisation for what's actually being forecast.</p></div>
     </div>
   </div>
 </section>
@@ -327,7 +380,7 @@
     </div>
     <div style="display:flex; align-items:center; gap:10px;">
       <div class="regime-pill" id="regimePill"></div>
-      <button class="theme-toggle" id="themeToggle" title="Toggle light/dark">◐ Theme</button>
+      <button class="theme-toggle" id="themeToggle" title="Toggle light/dark" aria-label="Toggle light or dark theme">◐ Theme</button>
     </div>
   </header>
 
@@ -389,7 +442,7 @@
     <section class="card">
       <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:4px;">
         <div><h2 style="margin-bottom:2px;">Stock Explorer</h2><p class="hint" style="margin-bottom:0;">Real daily price, volume &amp; volatility history &mdash; full ~15-year record, every stock.</p></div>
-        <select class="stockpick" id="explorerPicker"></select>
+        <select class="stockpick" id="explorerPicker" aria-label="Select stock to explore"></select>
       </div>
       <div class="stat-tile-row" id="explorerStats"></div>
       <div class="chart-toggle" id="explorerLookback">
@@ -462,20 +515,28 @@ function fmtPct(v, digits = 1) { return (v * 100).toFixed(digits) + '%'; }
 function shortTicker(t) { return t.replace('.NS', ''); }
 function fmtNum(v) { return v == null ? '—' : v.toLocaleString(); }
 
-fetch('./data.json')
-  .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-  .then(payload => {
-    PORTFOLIO = payload.portfolio; GNN = payload.gnn; LSTM = payload.lstm;
-    SECTOR_MAP = payload.sector_map; HIST = payload.market; MAX_WEIGHT = payload.max_weight ?? 0.35;
-    document.getElementById('loadState').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-    initApp();
-  })
-  .catch(err => {
-    document.getElementById('loadState').innerHTML =
-      `Couldn't load data.json (${err.message}). If you're running this locally, serve the folder ` +
-      `over HTTP (e.g. <code>python3 -m http.server</code> from web/) rather than opening the file directly.`;
-  });
+function loadData() {
+  const loadState = document.getElementById('loadState');
+  loadState.classList.remove('errored');
+  document.getElementById('loadMsg').textContent = 'Loading real market data…';
+  fetch('./data.json', { cache: 'no-store' })
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(payload => {
+      PORTFOLIO = payload.portfolio; GNN = payload.gnn; LSTM = payload.lstm;
+      SECTOR_MAP = payload.sector_map; HIST = payload.market; MAX_WEIGHT = payload.max_weight ?? 0.35;
+      loadState.style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      initApp();
+    })
+    .catch(err => {
+      loadState.classList.add('errored');
+      document.getElementById('loadMsg').innerHTML =
+        `Couldn't load data.json (${err.message}). If you're running this locally, serve the folder ` +
+        `over HTTP (e.g. <code>python3 -m http.server</code> from web/) rather than opening the file directly.`;
+    });
+}
+document.getElementById('loadRetry').addEventListener('click', loadData);
+loadData();
 
 function initApp() {
 (function renderTicker() {
@@ -498,13 +559,26 @@ function initApp() {
 
 (function renderHero() {
   const stats = [
-    [PORTFOLIO.tickers.length, 'Stocks tracked'],
-    ['15 yrs', 'Training history'],
-    ['Daily', 'Automated rebalance'],
-    [GNN.n_train + GNN.n_val + GNN.n_test, 'Trading days modeled'],
+    [PORTFOLIO.tickers.length, 'Stocks tracked', true],
+    ['15 yrs', 'Training history', false],
+    ['Daily', 'Automated rebalance', false],
+    [GNN.n_train + GNN.n_val + GNN.n_test, 'Trading days modeled', true],
   ];
-  document.getElementById('heroStats').innerHTML = stats.map(([num, lbl]) => `
-    <div class="hero-stat"><div class="num">${num}</div><div class="lbl">${lbl}</div></div>`).join('');
+  document.getElementById('heroStats').innerHTML = stats.map(([num, lbl, animate], i) => `
+    <div class="hero-stat"><div class="num" ${animate ? `data-count="${num}"` : ''}>${animate ? '0' : num}</div><div class="lbl">${lbl}</div></div>`).join('');
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.querySelectorAll('#heroStats [data-count]').forEach(el => {
+      const target = parseInt(el.dataset.count, 10), dur = 900, start = performance.now();
+      function tick(now) {
+        const p = Math.min(1, (now - start) / dur), eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(target * eased).toLocaleString();
+        if (p < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    });
+  } else {
+    document.querySelectorAll('#heroStats [data-count]').forEach(el => { el.textContent = parseInt(el.dataset.count, 10).toLocaleString(); });
+  }
 })();
 
 (function renderHeader() {
@@ -906,6 +980,39 @@ document.querySelectorAll('.tabbtn').forEach(btn => btn.addEventListener('click'
     const current = root.getAttribute('data-theme');
     root.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
   });
+})();
+
+(function revealOnScroll() {
+  const targets = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    targets.forEach(el => el.classList.add('in'));
+    return;
+  }
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) { entry.target.classList.add('in'); io.unobserve(entry.target); }
+    });
+  }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
+  targets.forEach(el => io.observe(el));
+})();
+
+(function scrollSpy() {
+  const sections = ['methodology', 'dashboard'].map(id => document.getElementById(id)).filter(Boolean);
+  const links = document.querySelectorAll('.navlinks a[href^="#"]:not(.cta)');
+  if (!('IntersectionObserver' in window) || !sections.length) return;
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      links.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + entry.target.id));
+    });
+  }, { rootMargin: '-40% 0px -55% 0px', threshold: 0 });
+  sections.forEach(s => io.observe(s));
+})();
+
+(function backToTop() {
+  const btn = document.getElementById('backToTop');
+  window.addEventListener('scroll', () => { btn.classList.toggle('show', window.scrollY > 500); }, { passive: true });
+  btn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
 })();
 
 } // initApp

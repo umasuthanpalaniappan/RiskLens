@@ -462,6 +462,14 @@
       <svg class="cmp" id="internalsChart" viewBox="0 0 560 220"></svg>
       <div class="callout" id="gnnCallout"></div>
     </section>
+    <section class="card">
+      <h2>Prediction error: MAE &amp; MSE</h2>
+      <p class="hint">Mean absolute / squared error between predicted and actual next-5-day volatility ratio on the held-out test set &mdash; lower is better. MAE is in the same units as the ratio itself; MSE weights large misses more heavily (vol ratios are fat-tailed, so it runs higher than MAE would suggest).</p>
+      <div class="grid2">
+        <div><p class="hint" style="margin-bottom:8px;"><b>Mean Absolute Error</b></p><svg class="cmp" id="maeChart" viewBox="0 0 560 220"></svg></div>
+        <div><p class="hint" style="margin-bottom:8px;"><b>Mean Squared Error</b></p><svg class="cmp" id="mseChart" viewBox="0 0 560 220"></svg></div>
+      </div>
+    </section>
     <section class="card"><h2>Per-stock GNN gate alpha</h2><p class="hint">Diverging around 0.5 &mdash; blue leans toward trusting the LSTM signal, red leans toward trusting the graph signal.</p><div class="barchart" id="alphaBars"></div></section>
   </div>
 
@@ -811,6 +819,41 @@ document.getElementById('gnnCallout').innerHTML = `
   <b>Honest read:</b> the graph-only head scores ${fmtPct(GNN.test_direction_accuracy_gnn_only,1)} &mdash; essentially a coin flip &mdash;
   while the LSTM-only head alone scores ${fmtPct(GNN.test_direction_accuracy_lstm_only,1)}. The blended, deployed model lands at
   ${fmtPct(GNN.test_direction_accuracy_blended,1)}.`;
+
+function renderErrorChart(svgId, series, metricLabel) {
+  const svg = document.getElementById(svgId);
+  const W = 560, H = 220, padTop = 18, padBottom = 34, padSide = 30;
+  const n = series.length, gap = 28;
+  const barW = (W - padSide * 2 - gap * (n - 1)) / n;
+  const chartH = H - padTop - padBottom;
+  const vals = series.map(s => s.value).filter(v => v != null);
+  const maxV = Math.max(...vals, 1e-9) * 1.15;
+  let svgContent = '';
+  series.forEach((s, i) => {
+    const x = padSide + i * (barW + gap);
+    const v = s.value ?? 0;
+    const barH = chartH * (v / maxV);
+    const y = padTop + chartH - barH;
+    svgContent += `<rect class="cmp-bar" data-label="${s.label}" data-value="${v}" x="${x}" y="${y}" width="${barW}" height="${Math.max(barH,1)}" rx="4" fill="${s.color}"/>
+      <text x="${x + barW/2}" y="${y - 8}" text-anchor="middle" class="cmp-value">${v.toFixed(3)}</text>
+      <text x="${x + barW/2}" y="${H - padBottom + 18}" text-anchor="middle" class="cmp-label">${s.label}</text>`;
+  });
+  svg.innerHTML = svgContent;
+  svg.querySelectorAll('.cmp-bar').forEach(rect => {
+    rect.addEventListener('mousemove', (e) => showTip(e, `<b>${rect.dataset.label}</b><div class="row"><span>${metricLabel}</span><span>${parseFloat(rect.dataset.value).toFixed(4)}</span></div>`));
+    rect.addEventListener('mouseleave', hideTip);
+  });
+}
+renderErrorChart('maeChart', [
+  { label: 'LSTM-only', value: GNN.test_mae_lstm_only, color: 'var(--s1)' },
+  { label: 'GNN-only', value: GNN.test_mae_gnn_only, color: 'var(--s2)' },
+  { label: 'Blended', value: GNN.test_mae_blended, color: 'var(--s3)' },
+], 'MAE');
+renderErrorChart('mseChart', [
+  { label: 'LSTM-only', value: GNN.test_mse_lstm_only, color: 'var(--s1)' },
+  { label: 'GNN-only', value: GNN.test_mse_gnn_only, color: 'var(--s2)' },
+  { label: 'Blended', value: GNN.test_mse_blended, color: 'var(--s3)' },
+], 'MSE');
 
 let sortKey = 'weight', sortDir = -1;
 const COLS = [

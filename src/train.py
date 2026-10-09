@@ -116,6 +116,7 @@ def train_lstm(tickers=None, epochs: int = config.EPOCHS) -> dict:
         "n_val": int(len(val_y)),
         "n_test": int(len(test_y)),
         "test_mse": evaluate.mse(test_pred, test_true) if len(test_true) else None,
+        "test_mae": evaluate.mae(test_pred, test_true) if len(test_true) else None,
         "test_direction_accuracy": evaluate.direction_accuracy(test_pred, test_true) if len(test_true) else None,
     }
     _save_json(results, config.LSTM_RESULTS_PATH)
@@ -194,17 +195,20 @@ def train_gnn(tickers=None, epochs: int = config.EPOCHS) -> dict:
         true = dataset.denormalize(np.concatenate(true_all), tstats)
         metrics = {
             "test_mse_blended": evaluate.mse(blended, true),
+            "test_mae_blended": evaluate.mae(blended, true),
             "test_direction_accuracy_blended": evaluate.direction_accuracy(blended, true),
             "test_mse_lstm_only": evaluate.mse(lstm_only, true),
+            "test_mae_lstm_only": evaluate.mae(lstm_only, true),
             "test_direction_accuracy_lstm_only": evaluate.direction_accuracy(lstm_only, true),
             "test_mse_gnn_only": evaluate.mse(gnn_only, true),
+            "test_mae_gnn_only": evaluate.mae(gnn_only, true),
             "test_direction_accuracy_gnn_only": evaluate.direction_accuracy(gnn_only, true),
         }
     else:
         metrics = {k: None for k in (
-            "test_mse_blended", "test_direction_accuracy_blended",
-            "test_mse_lstm_only", "test_direction_accuracy_lstm_only",
-            "test_mse_gnn_only", "test_direction_accuracy_gnn_only",
+            "test_mse_blended", "test_mae_blended", "test_direction_accuracy_blended",
+            "test_mse_lstm_only", "test_mae_lstm_only", "test_direction_accuracy_lstm_only",
+            "test_mse_gnn_only", "test_mae_gnn_only", "test_direction_accuracy_gnn_only",
         )}
 
     results = {

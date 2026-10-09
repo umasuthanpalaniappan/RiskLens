@@ -238,6 +238,11 @@ with tab_models:
                 gnn_results.get("test_direction_accuracy_gnn_only"),
                 gnn_results.get("test_direction_accuracy_blended"),
             ],
+            "mae": [
+                gnn_results.get("test_mae_lstm_only"),
+                gnn_results.get("test_mae_gnn_only"),
+                gnn_results.get("test_mae_blended"),
+            ],
             "mse": [
                 gnn_results.get("test_mse_lstm_only"),
                 gnn_results.get("test_mse_gnn_only"),
@@ -245,12 +250,16 @@ with tab_models:
             ],
         }
     )
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
     with c1:
         fig_b1 = px.bar(breakdown_df, x="component", y="direction_accuracy", text_auto=".1%")
         fig_b1.update_layout(yaxis_tickformat=".0%", xaxis_title="", yaxis_title="Direction accuracy")
         st.plotly_chart(fig_b1, use_container_width=True)
     with c2:
+        fig_mae = px.bar(breakdown_df, x="component", y="mae", text_auto=".3f")
+        fig_mae.update_layout(xaxis_title="", yaxis_title="Test MAE (vol ratio)")
+        st.plotly_chart(fig_mae, use_container_width=True)
+    with c3:
         fig_b2 = px.bar(breakdown_df, x="component", y="mse", text_auto=".3f")
         fig_b2.update_layout(xaxis_title="", yaxis_title="Test MSE (vol ratio)")
         st.plotly_chart(fig_b2, use_container_width=True)

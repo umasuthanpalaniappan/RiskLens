@@ -20,7 +20,11 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          # CPU-only PyTorch (~200 MB); the default PyPI wheel pulls ~3 GB of CUDA
+          # libraries and filled the runner disk ("No space left on device").
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
 
       - name: Export raw unadjusted close prices
         run: python scripts/export_raw_prices.py

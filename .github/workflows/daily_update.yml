@@ -3,15 +3,19 @@ name: Daily RiskLens update
 on:
   schedule:
     # 12:30 UTC == 18:00 IST, after the NSE market close.
+    # GitHub starts scheduled runs late (often several hours), so the real
+    # update lands in the evening/night rather than exactly at 18:00.
     - cron: "30 12 * * *"
   workflow_dispatch: {}
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   update-portfolio:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -23,7 +27,12 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          # CPU-only PyTorch (~200 MB). The default PyPI wheel pulls ~3 GB of
+          # CUDA libraries, which filled the runner disk ("No space left on
+          # device") and failed 8 daily runs in Oct-Nov 2026.
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
 
       - name: Run daily portfolio update
         run: python scripts/run_portfolio.py
@@ -38,14 +47,74 @@ jobs:
           path: data/raw/
           retention-days: 7
 
-      - name: Commit and push results if changed
+      # Runs on every run, including failed ones, so there is a commit every
+      # day. On success it also commits the new results; on failure it commits
+      # only web/status.json (what happened and which date the data is from).
+      - name: Record status and commit (even when the update failed)
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ -n "$(git status --porcelain results/ web/data.json)" ]; then
-            git add results/ web/data.json
-            git commit -m "chore: daily RiskLens portfolio update ($(date -u +%Y-%m-%d))"
-            git push
+          python3 - <<'EOF'
+          import datetime as dt
+          import json
+          import os
+
+          as_of = None
+          try:
+              with open("web/data.json") as f:
+                  as_of = json.load(f)["portfolio"]["as_of_date"]
+          except Exception:
+              pass
+          status = {
+              "checked_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+              "run_status": os.environ["JOB_STATUS"],
+              "data_as_of": as_of,
+              "run_url": os.environ["RUN_URL"],
+          }
+          with open("web/status.json", "w") as f:
+              json.dump(status, f, indent=2)
+              f.write("\n")
+          EOF
+          DAY=$(date -u +%Y-%m-%d)
+          if [ "$JOB_STATUS" = "success" ]; then
+            git add results/ web/data.json web/status.json
+            MSG="chore: daily RiskLens portfolio update ($DAY)"
           else
-            echo "No changes in results/ or web/data.json, skipping commit."
+            git add web/status.json
+            MSG="chore: daily status ($DAY) - update $JOB_STATUS, dashboard data not refreshed"
+          fi
+          git commit -m "$MSG"
+          git pull --rebase --autostash
+          git push
+
+      - name: Alert - open or update an issue when the update fails
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          TITLE="Daily RiskLens update is failing"
+          WHEN=$(date -u +'%Y-%m-%d %H:%M UTC')
+          N=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$N" ]; then
+            gh issue comment "$N" --body "Failed again on $WHEN. Run: $RUN_URL"
+          else
+            gh issue create --title "$TITLE" --assignee "$OWNER" \
+              --body "The scheduled daily update failed on $WHEN, so the dashboard is showing the last good data. Run: $RUN_URL. This issue closes itself when a run succeeds again."
+          fi
+
+      - name: Close the failure issue once the update works again
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          N=$(gh issue list --state open --search "Daily RiskLens update is failing in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$N" ]; then
+            gh issue close "$N" --comment "Recovered: the daily update succeeded. Run: $RUN_URL"
           fi

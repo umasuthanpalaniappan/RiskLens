@@ -20,7 +20,11 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          # CPU-only PyTorch (~200 MB); the default PyPI wheel pulls ~3 GB of CUDA
+          # libraries and filled the runner disk ("No space left on device").
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
 
       - name: Export web/data.json for the Vercel dashboard
         run: python scripts/export_dashboard_data.py

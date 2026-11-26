@@ -20,6 +20,22 @@ from src import config
 _DOWNLOAD_RETRIES = 3
 _DOWNLOAD_RETRY_DELAY_SECONDS = 5
 
+_IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
+_MARKET_CLOSE_IST = dt.time(16, 0)  # NSE closes 15:30 IST; the buffer lets the final bar settle
+
+
+def _default_end_date() -> str:
+    """Exclusive ``end`` date for yfinance, so the newest *finished* session is included.
+
+    yfinance treats ``end`` as exclusive, so ``end=today`` can never contain
+    today's bar: a run on the evening of a trading day used to publish data
+    that was a full trading day behind. Include today only once NSE has
+    closed (a manual run mid-session must not store a half-finished bar).
+    """
+    now = dt.datetime.now(_IST)
+    include_today = now.time() >= _MARKET_CLOSE_IST
+    return (now.date() + dt.timedelta(days=1 if include_today else 0)).isoformat()
+
 
 def _download(tickers: List[str], start: str, end: Optional[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Download adjusted close prices and volume for ``tickers`` via yfinance.
@@ -104,7 +120,7 @@ def fetch_price_volume(
         if all(t in prices.columns for t in tickers) and all(t in volumes.columns for t in tickers):
             return prices[tickers], volumes[tickers]
 
-    end = end or dt.date.today().isoformat()
+    end = end or _default_end_date()
     prices, volumes = _download_with_retries(tickers, start, end)
     prices = prices.dropna(how="all")
     volumes = volumes.reindex(prices.index)

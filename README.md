@@ -29,19 +29,20 @@ For 18 large/mid-cap NSE stocks, RiskLens:
 |---|---|
 | <img src="docs/screenshots/portfolio.png" width="100%"> | <img src="docs/screenshots/network-graph.png" width="100%"> |
 
-The network graph (Market Overview tab) isn't decorative — it's a force-directed visualization of the *actual graph* the GNN convolves over: real 60-day volatility correlations, nodes sized by real portfolio weight. Hover to trace a stock's neighbourhood; click to jump straight to it.
+The network (Market Overview tab) is drawn from the signed 60-day correlation of daily **returns** — the same matrix that builds the portfolio's risk model (red = move together, blue = move opposite), with nodes sized by real portfolio weight. The GNN's own graph is built the same way every day, but from realised **volatility** rather than returns. Hover to trace a stock's neighbourhood; click to jump straight to it.
 
 ## Current results
 
-| Model | Test direction accuracy | Test MSE |
-|---|---|---|
-| LSTM baseline | 71.9% | 1.04 |
-| GNN — graph-only head | 47.0% (~coin flip) | 1.45 |
-| **GNN — blended (deployed)** | **72.1%** | **0.85** |
+| Model | Test direction accuracy | Test MAE | Test MSE |
+|---|---|---|---|
+| LSTM baseline | 71.3% | 0.534 | 0.739 |
+| GNN — graph-only head | 50.3% (≈ coin flip) | 0.679 | 1.423 |
+| GNN — LSTM-only head (inside the GNN) | 68.7% | 0.783 | 1.413 |
+| **GNN — blended (deployed)** | **70.9%** | **0.529** | **0.757** |
 
-*(Direction accuracy = correctly calling whether 5-day-ahead realised volatility rises or falls, on a held-out chronological test split of real NSE data. See the [live Model Performance tab](https://risk-lens-orcin.vercel.app/#dashboard) for current numbers — this table updates when the model is retrained; it isn't guaranteed to match what you see live.)*
+*(Direction accuracy = correctly calling whether 5-day-ahead realised volatility rises or falls, on a held-out chronological test split of real NSE data. See the [live Model Performance tab](https://risk-lens-orcin.vercel.app/#dashboard) for current numbers — this table is from the 9 Oct 2026 retrain (full detail in [`docs/metrics.md`](docs/metrics.md)); it updates when the model is retrained and isn't guaranteed to match what you see live.)*
 
-We report the graph-only number deliberately: it's close to chance on its own. The value RiskLens gets from the GNN is a small, honest lift on top of the LSTM, not a graph doing the heavy lifting by itself. **This is a research/educational project — not financial advice.**
+We report the graph-only number deliberately: it's close to chance on its own. The blend has the lowest MAE but not the best direction accuracy or MSE; the gap to the plain LSTM is within run-to-run noise, so read the two as comparable. The value of the graph is as a small learned correction through the per-stock gate, not a graph doing the heavy lifting by itself. **This is a research/educational project — not financial advice.**
 
 ## Table of contents
 
@@ -52,6 +53,7 @@ We report the graph-only number deliberately: it's close to chance on its own. T
 - [Running the pipeline](#running-the-pipeline)
 - [Daily automation](#daily-automation)
 - [Dashboards](#dashboards)
+- [Tests and CI](#tests-and-ci)
 - [Regime classification](#regime-classification)
 
 ## Why minimum-variance, not Markowitz
@@ -186,10 +188,10 @@ dashboards need `results/*.json` to exist.
 
 `.github/workflows/daily_update.yml` runs on a cron of `30 12 * * *` (UTC),
 i.e. 18:00 IST, after the NSE market close. It installs
-`requirements.txt`, runs `scripts/run_portfolio.py` (inference only — it
+`requirements.txt` (CPU-only PyTorch first — the default wheel pulls ~3 GB of CUDA libraries and once filled the runner disk), runs `scripts/run_portfolio.py` (inference only — it
 does not retrain the models) and `scripts/export_dashboard_data.py`, and
 commits `results/` + `web/data.json` back to the repo as the
-`github-actions[bot]` identity, but only if something actually changed. It
+`github-actions[bot]` identity. GitHub starts scheduled runs late (often hours), so the update lands in the evening or night rather than at exactly 18:00. Every run — including a failed one — also commits `web/status.json` (time, result, the date of the data the dashboard holds). If a run fails, an issue titled *Daily RiskLens update is failing* is opened and assigned to the repo owner, and it closes itself when a run succeeds again. The price download ends the day after the last finished NSE session (IST-aware, from 16:00), so each evening's close is included. It
 does not retrain `models/*.pt`; retraining is a separate, manual step
 (`run_lstm.py` / `run_gnn.py`) since it's compute-heavier and the
 universe/graph structure doesn't need to be re-learned every day.
@@ -222,6 +224,15 @@ Two dashboards read the same result JSONs:
   built with the same real ~15-year data as everything else.
 - **[`app/dashboard.py`](app/dashboard.py)** — a local Streamlit app for
   development; covers the same core data without the extra sections above.
+
+## Tests and CI
+
+```bash
+pip install pytest        # on top of requirements.txt
+python -m pytest          # ~60 fast tests, no network access needed
+```
+
+`tests/` covers the minimum-variance optimiser (valid long-only capped weights, the 35% cap, the two-stock closed-form solution, the regime overlay), the regime classifier, feature engineering (including a guard that no feature ever looks ahead), the correlation graph and Laplacian, the evaluation metrics, the model shapes and the gate, seeding, and the data end-date logic. `.github/workflows/tests.yml` runs them on every push and pull request (skipping runs that only touch the bot's data files or docs). Training is seeded (`train.set_seed`, seed in `config.SEED`), so a retrain on the same data reproduces.
 
 ## Regime classification
 

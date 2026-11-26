@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import random
 from typing import Dict, Tuple
 
 import numpy as np
@@ -28,6 +29,18 @@ def _save_json(obj: dict, path: str) -> None:
     config.ensure_dirs()
     with open(path, "w") as f:
         json.dump(obj, f, indent=2)
+
+
+def set_seed(seed: int = config.SEED) -> None:
+    """Seed every RNG training touches, so the same data gives the same model.
+
+    Without this, weight initialisation and the LSTM's mini-batch shuffling
+    differed on every run, so retrains could not be reproduced and small
+    metric differences between models could not be told apart from noise.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
 
 def prepare_universe(tickers=None) -> Tuple[Dict[str, "pd.DataFrame"], "pd.DataFrame"]:
@@ -58,6 +71,7 @@ def _get_or_build_norm_stats(panel, train_dates):
 
 def train_lstm(tickers=None, epochs: int = config.EPOCHS) -> dict:
     """Train the pooled single-stock LSTM baseline and save weights + results."""
+    set_seed()
     panel, _returns = prepare_universe(tickers)
     any_dates = next(iter(panel.values())).index
     split = dataset.chronological_split(any_dates)
@@ -130,6 +144,7 @@ def train_lstm(tickers=None, epochs: int = config.EPOCHS) -> dict:
 def train_gnn(tickers=None, epochs: int = config.EPOCHS) -> dict:
     """Train the dynamic-graph GNN and save weights + results (incl. per-node alpha)."""
     tickers = tickers or config.TICKERS
+    set_seed()
     panel, _returns = prepare_universe(tickers)
     any_dates = next(iter(panel.values())).index
     split = dataset.chronological_split(any_dates)

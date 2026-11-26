@@ -1,0 +1,41 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: &ignored
+      # Files the daily bot commits, and docs: nothing here can break the code.
+      - "results/**"
+      - "web/data.json"
+      - "web/status.json"
+      - "docs/**"
+      - "**.md"
+  pull_request:
+    paths-ignore: *ignored
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          # CPU-only PyTorch: the default wheel pulls ~3 GB of CUDA libraries.
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt pytest
+
+      - name: Run the test suite
+        run: python -m pytest

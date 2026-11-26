@@ -498,7 +498,7 @@
   <div class="panel" id="panel-market">
     <section class="card">
       <h2>Dynamic correlation network</h2>
-      <p class="hint">This is the actual graph structure the GNN convolves over &mdash; nodes are stocks (sized by portfolio weight, coloured by sector), edges are the strongest real 60-day volatility correlations. Hover a node to trace its neighbourhood; click to jump to it in the Stock Explorer.</p>
+      <p class="hint">The 18 stocks as a network &mdash; nodes are stocks (sized by portfolio weight, coloured by sector), edges are the strongest 60-day correlations of daily returns, the same matrix that builds the portfolio's risk model (red = move together, blue = move opposite). The GNN's own graph is built the same way every day, but from volatility rather than returns. Hover a node to trace its neighbourhood; click to jump to it in the Stock Explorer.</p>
       <div class="net-wrap"><svg class="netgraph" id="networkGraph" viewBox="0 0 800 540"></svg></div>
       <div class="legend" id="networkLegend"></div>
     </section>
